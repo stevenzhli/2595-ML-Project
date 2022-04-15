@@ -1,0 +1,126 @@
+---
+subtitle: "Part 2B, Regression - Bayesian Models"
+author: "Zhenyu Li"
+date: '2022-03-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+theme_set(theme_linedraw())
+library(rstanarm)
+options(mc.cores = parallel::detectCores())
+library(corrplot)
+source("./scripts/utils.R")
+```
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_num_in <- setdiff(sel_num,"response")
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+sel_cat_in <- setdiff(sel_cat, "outcome")
+```
+
+----
+
+## Preprocessing
+
+- For regression, the necessary preprocessing steps include:
+  - Log-transform the continuous response
+  - Normalize continuous inputs
+
+```{r}
+df_preproc <- df %>% 
+  mutate_if(is.character,as.factor) %>% 
+  select(-c(rowid,outcome)) %>% 
+  mutate(
+    response = log(response),
+    across(starts_with("x"), scale)
+  )
+```
+
+----
+
+## Bayesian Model Fitting
+
+Select two models from 2A for Bayesian model fitting. 
+- Model `mod_2A3` and `mod_2AC1`
+- The `mod_2AC1` has non-linearity added to continuous inputs. We could see if this help to reduce the uncertainty in the models. 
+
+```{r}
+mod_2B1 <- stan_lm(
+  response ~ ., df_preproc, # like mod_2A3
+  prior = R2(location = 0.5),
+  seed = 2095
+)
+```
+
+
+
+```{r}
+mod_2B2 <- stan_lm(
+  response ~ 
+  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) +
+  (.) , df_preproc, 
+  prior = R2(location = 0.5),
+  seed = 2095
+)
+```
+
+## Examine Models
+
+### Coefficients
+
+```{r}
+posterior_interval(mod_2B1)
+```
+
+```{r}
+posterior_interval(mod_2B2)
+```
+
+```{r out.width= 300, fig.width=3, fig.asp=1.2}
+plot(mod_2B1) +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = .5)
+```
+
+```{r out.width= 300, fig.width=3, fig.asp=1.2}
+plot(mod_2B2) + 
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = .5)
+```
+
+### Coefficient Correlation
+
+```{r out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
+mod_2B1 %>% as_tibble() %>% 
+  select(all_of(names(mod_2B1$coefficients))) %>% 
+  cor() %>% corrplot(method="color", type="upper")
+```
+
+----
+
+## Conclusions
+
+- Identify the best model
+  - Which performance metric did you use to make your selection?
+
+```{r}
+waic(mod_2B1)
+waic(mod_2B2)
+```
+
+- Visualize the regression coefficient posterior summary statistics for your best model.
+
+- For your best model:
+  - Study the posterior uncertainty in the noise (residual error), 𝜎.
+  - How does the `lm()` maximum likelihood estimate (MLE) on 𝜎 relate to the posterior uncertainty on 𝜎 ?
+  - Do you feel the posterior is precise or are we quite uncertain about 𝜎

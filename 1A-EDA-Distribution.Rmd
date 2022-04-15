@@ -1,0 +1,272 @@
+---
+subtitle: "Part 1A, EDA: Distribution"
+author: "Zhenyu Li"
+date: '2022-03-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+source("./scripts/utils.R")
+theme_set(theme_linedraw())
+```
+
+----
+
+In section 1A we will explore the data for basic properties and distribution of the variables. 
+- Check data summary, missing values, range, unique values, etc for each variable. 
+- Examine distribution of individual variables. 
+- Check correlation between continuous inputs. 
+
+**Read in the data: **
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+```
+
+
+Examine the dataset by `glimpse`.
+
+```{r}
+df %>% glimpse()
+```
+
+Select numeric and non-numeric fields into respective variables for easy reference later on. 
+
+```{r}
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+```
+
+Perform required data transformations for the `response` and `outcome` fields. 
+
+```{r}
+df_eda <- df %>% mutate(
+  log_response = log(response),
+  binary_outcome = ifelse(outcome=="event", 1, 0))
+```
+
+----
+
+## Categorical Variables
+
+### Data Summary
+
+**Get a summary of the categorical variables `region` and `customer`, as well as the binary response `outcome`. Check missing values, unique values. **.
+
+```{r}
+summarize_cate_var <- function(df) {
+  tibble(
+    variable = names(df),
+    n_missing = map_dbl(df, ~sum(is.na(.))),
+    n_levels = map_dbl(df, n_distinct),
+  ) %>% mutate(
+    percent_missing = n_missing/nrow(df)*100,
+  )
+}
+
+summ_cate <- df_eda %>% select(all_of(sel_cat)) %>% summarize_cate_var()
+summ_cate %>% knitr::kable(caption = "categorical variables overview")
+```
+
+- There is no missing value in categorical variables.
+- There are 3 levels for `region` and 9 levels for `customer`.
+
+
+### Data Distribution
+
+**Count the unique levels for each category and sort by count for each category.**
+
+```{r}
+df_eda %>% select(sel_cat) %>% pivot_longer(everything(), names_to ="var", values_to="level") %>% 
+  count(var,level) %>% arrange(var,n) %>% 
+  knitr::kable(caption = "categorical variables count")
+```
+
+**Use barchart to visualize the distribution of categorical input and binary response variables.**
+
+```{r out.width=400, fig.width=4, fig.asp=0.45, warning=FALSE}
+df_eda %>% select(sel_cat) %>% pivot_longer(everything()) %>%
+  ggplot() +
+  geom_bar(aes(x=value, fill=value)) +
+  facet_grid(~name, scales="free_x", space="free_x") +
+  xlab("") + theme(legend.position="none")
+```
+
+- The categorical inputs
+  - For `region` variable, there are more sale attempts for customers in region `ZZ`, than `YY`, than `XX`.
+  - For `customer` variable, besides `Other` group which is a pooled category, there are more sale attempts to customer `G`, followed by customer `M`.
+
+- The binary outcome
+  - The `outcome` needs to be {0,1} encoded for logistic regression. [preprocessing]
+  - The `outcome` variable is unbalanced: non-event (meet sale goal) consist of larger portion of the overall observations. The observed overall event probability is about 0.188. [interpretation]
+
+```{r}
+df_eda %>% select(binary_outcome) %>% colMeans()
+```
+
+----
+
+## Continuous Variables
+
+### Data Summary
+
+**Get a high level summary of the numeric variables, check missing values, unique values, range and median.**
+
+```{r}
+summarize_nume_var <- function(df) {
+  tibble(
+    variable = names(df),
+    n_missing = map_dbl(df, ~sum(is.na(.))),
+    n_unique = map_dbl(df, n_distinct),
+    min = map_dbl(df, min),
+    median = map_dbl(df, median),
+    max = map_dbl(df, max)
+  ) %>% mutate(
+    percent_missing = n_missing/nrow(df)*100,
+    percent_unique = n_unique/nrow(df)*100,
+  )
+}
+
+summ_nume <- summarize_nume_var(df %>% select(all_of(sel_num)))
+summ_nume %>% knitr::kable(caption = "numeric variables overview")
+```
+
+- There is no missing value in all numeric variables.
+- All sentiment derived features are numeric.
+  - They are at different scales, and need to be normalized. [preprocessing]
+  - Most are clearly continuous, but some may be discrete (very limited unique values).
+
+**Examine the variables with less than 5% unique values.**
+
+```{r}
+cols_tmp <- summ_nume %>% filter(percent_unique < 5) %>% select("variable") %>%  as_vector() %>% unname()
+
+df_eda %>% select(all_of(cols_tmp)) %>% lapply(unique) %>% lapply(sort)
+```
+
+- They look like categorical variables with numeric levels. Because of the large number of categories, I'll still treat them as continuous.  
+
+### Data Distribution
+
+**Examine the data distribution of the input variables. **
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value,fill=region)) +
+    geom_histogram(bins=50) +
+    facet_wrap(~name, scales="free", ncol=8) +
+    ylab("") + xlab("")
+plot_grid(p)
+```
+
+**Check if inputs are normally distributed using q-q plot**
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>% select(starts_with("x")) %>%
+  pivot_longer(everything()) %>%
+  ggplot() +
+    geom_qq(aes(sample=value), size=0.2, alpha=0.1) +
+    facet_wrap(~name, scales="free", ncol=8) +
+    xlab("")+ylab("")
+plot_grid(p)
+```
+
+- Most features look normally distributed, except:
+  - The `xw` that corresponds to word count data, which is lower-bounded by 0. Two of them `xw_02`, `xw_03` look quite skewed.
+  - The `xs_05` looks like it has 0 as lower bounded.
+- The four numeric categorical inputs are manifested by the separated bins found on `xb_02`,`xb_03`,`xn_02`,`xn_03`.
+- Inputs are not uniform across the `region` category. 
+
+**Examine the distribution of the continuous response.**
+
+```{r out.width=500, fig.width=5, fig.asp=0.65, warning=FALSE}
+df_eda %>% select(response) %>%
+  ggplot() +
+    geom_histogram(aes(x=response), bins=50)
+```
+
+- The continuous `response` is lower-bounded by 0, and is not normally distributed with the long tail. Must be log-transformed. [preprocessing]
+- Majority of the `response` are below 5, with a tail extending beyond 10. There is also one data point with over 20 hours of interaction time. This may be an outlier that worth consider removing. [preprocessing???]
+
+**Visualize q-q plot of log-transformed response.**
+
+```{r out.width=300, fig.width=5, fig.asp=1, warning=FALSE}
+df_eda %>%
+  ggplot() +
+  geom_qq(aes(sample=log_response)) 
+```
+
+
+**Check the data points with over 10 hours of sale time. **
+
+```{r}
+df_eda %>% filter(response > 10) %>% arrange(desc(response)) %>% knitr::kable(caption = "potential outliers")
+```
+
+
+### Conditioned on Categorical
+
+**Examine continuous input summary statistics based on region. **
+
+```{r out.width=1200, fig.width=12, fig.asp=0.60, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(y=value, x=region, color=region)) +
+  geom_boxplot(outlier.size = 0.2) +
+  facet_wrap(~name, scales="free", ncol=8) +
+  xlab("") + ylab("")
+plot_grid(p)
+```
+
+
+**Examine continuous input summary statistics based on customer. **
+
+```{r out.width=1200, fig.width=12, fig.asp=0.60, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(y=value, x=customer, color=customer)) +
+  geom_boxplot(outlier.size = 0.2) +
+  facet_wrap(~name, scales="free", ncol=8) +
+  xlab("") + ylab("")
+plot_grid(p)
+```
+
+
+----
+
+## Input Correlation
+
+Input correlation could lead to uncertainty in posterior model coefficients and difficulty when using Lasso regularized regression.  
+
+### Continuous Input
+
+**Check correlation between continuous input variables.** 
+
+```{r out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
+df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
+  cor() %>%
+  corrplot::corrplot(type="upper", method="color", diag=F)
+```
+
+- There are clear correlation patterns between some input variables.
+  - The sequential blue diagonal squares indicate the positive correlations between features with same feature index among the lexicon derived features `xa`,`xb` and `xn`.
+  - The many 4-cell blue-red diagonals squares indicate correlation between feature index `02`,`03` and between index `05`,`06` features for each set of inputs. 
+  - These are more obvious when reordered. 
+
+```{r out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
+df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
+  cor() %>%
+  corrplot::corrplot(
+    type="upper", 
+    method="color", 
+    diag = F,
+    order="hclust",
+    hclust.method="ward.D2")
+```
+

@@ -1,0 +1,257 @@
+---
+subtitle: "Part 1B, EDA: Covariation"
+author: "Zhenyu Li"
+date: '2022-04-8'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggbeeswarm)
+source("./scripts/utils.R")
+theme_set(theme_linedraw())
+```
+
+----
+
+This continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between input and output. 
+- Covariation between an input and an output could indicate the input can be used to predict the output. 
+- Visualize the relationship between input and output to help with feature engineering. 
+- Examine if interactions could affect prediction. 
+
+
+Load and transform the data as in Part1A. 
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+df_eda <- df %>% mutate(
+  log_response = log(response),
+  binary_outcome = ifelse(outcome=="event", 1, 0))
+```
+
+----
+
+## Continuous Response
+
+### Response vs Continuous Input
+
+**Examine the response with regard to every continuous input.**
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=response)) +
+  geom_point(size=0.5, alpha=0.2) +
+  geom_smooth(formula=y~x, method="lm") +
+  geom_smooth(formula=y~x, method="loess", color="darkorange",fill="darkorange") +
+  facet_wrap(~name, scales="free", ncol=8) +
+  xlab("")
+plot_grid(p)
+```
+
+- There are correlations between many inputs and the `response`. 
+  - Indicate these inputs should be able to predict the `response`. 
+  - Since we'll log-transform the `response` to remove its lower bound, will examine again at log-transformed scale. 
+
+**Examine the log-transformed response with regard to every continuous input.**
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=log_response)) +
+  geom_point(size=0.5, alpha=0.2) +
+  geom_smooth(formula=y~x, method="lm") +
+  geom_smooth(formula=y~x, method="loess", color="darkorange",fill="darkorange") +
+  facet_wrap(~name, scales="free", ncol=8) +
+  xlab("")
+plot_grid(p)
+```
+
+- Between inputs and the log-transformed `response`:
+  - The lexicon derived features `xa, xb, xn` at index `01, 02, 04, 06, 07` seem to be linear-correlated with log-response.
+  - Inputs that worth adding non-linearity to:  [feature-engineering]
+    - The lexicon derived features `xa, xb, xn` at index `03, 05, 08`
+    - The NLP derived features `xs` index `01, 04, 06`
+    - The word count features `xw` index `01, 02, 03`
+
+### Response vs Categorical Input
+
+**Check how each category level correlates with the log-transformed response.**
+
+```{r out.width=600, fig.width=6, fig.asp=0.50, warning=FALSE}
+df_eda %>%
+  pivot_longer(c(region,customer), values_to="level") %>%
+  ggplot(aes(x=level, y=log_response, color=level)) +
+  geom_boxplot(outlier.size = 0.5) +
+  geom_beeswarm(priority="none", size=0.5, alpha=0.5) + 
+  facet_grid(~name, scales="free_x", space="free_x") +
+  theme_linedraw() + xlab("") + theme(legend.position="none")
+```
+
+- It appears the categorical inputs have impact on the `response`. For example:
+  - The average `response` in region `ZZ` is clearly less than that in region `XX, YY`.
+  - Customer `M` received least average time spent on sale than other customer groups. 
+  - Customer `D` received on average the most sale time. 
+
+**For each region, see how `response` differ across customers. **
+
+```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
+df_eda %>% 
+  ggplot(aes(x=customer, y=log_response, color = customer)) +
+  geom_boxplot() +
+  geom_beeswarm(priority="none", size=0.5, alpha=0.5) +
+  facet_wrap(~region) + xlab("")
+```
+
+- At each region, `response` differs by `customer`. For example:
+  - On average the least response for customers `Other` in `ZZ` region.
+  - On average the most response is on customer `D` in `XX` region.
+  - Consider interacting the two categorical inputs. [feature-engineering] 
+
+**For each customer, check if `response` differ by regions. **
+
+```{r out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
+df_eda %>%
+  ggplot(aes(x=region, y=log_response, color = region)) +
+  geom_boxplot() +
+  geom_beeswarm(priority="none", size=0.5, alpha=0.5) +
+  facet_wrap(~customer) + xlab("")
+```
+
+- This basically reflects how the `response` correlates to `region` in a prevoius plot. 
+
+
+### Response vs Continuous and Categorical Inputs
+
+**Log-transformed response from each continuous input, conditioned on region. **
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=log_response, color=region)) +
+    # geom_boxplot(aes(group=cut_number(value,12), y=response), size=0.2, alpha=0.1) +
+    geom_point(size=0.5, alpha=0.2) +
+    geom_smooth(formula=y~x,method="lm") +
+    facet_wrap(~name, scales="free", ncol=8) +
+    xlab("")
+plot_grid(p)
+```
+
+- Region does have affect the relationship between certain inputs and the `response`. For example
+  - The `region` totally changes the direction of the correlation between inputs `xa_04`, `xa_05`, `xa_08`, `xs_01`, `xs_02` and `response`.
+    - This suggests that at different `region`, the same input feature could have contrasting effect on `response`. [interpretation]
+  - Consider interact `region` to the inputs. [feature-engineering]
+
+**Log-transformed response from each continuous input, conditioned on customer. **
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=log_response,color=customer)) +
+    # geom_boxplot(aes(group=cut_number(value,12), y=response), size=0.2, alpha=0.1) +
+    geom_point(size=0.5, alpha=0.2) +
+    geom_smooth(formula=y~x,method="lm", alpha=0.5, se=F) +
+    facet_wrap(~name, scales="free", ncol=8) +
+    xlab("")
+plot_grid(p)
+```
+
+- Just like `region`, `customer` also affects how certain inputs could predict the `response`. 
+  - Consider interact `customer` to the inputs. [feature-engineering]
+
+----
+
+## Binary Outcome
+
+### Outcome vs Continuous Input
+
+**Check how the binary outcome is affected by the continuous inputs.**
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=binary_outcome)) +
+    geom_point(size=0.5, alpha=0.1) +
+    geom_smooth(formula=y~x, method="glm", method.args=list(family=binomial)) +
+    facet_wrap(~name, scales="free", ncol=8) +
+    theme_linedraw() + xlab("")
+plot_grid(p)
+```
+
+- As shown by the smoother, some inputs have clear relation to the binary `outcome`.
+  - For most inputs, low input ranges associate with higher event probability, while high input ranges correlate with lower event probability.
+  - This is not true for `xs_04`,`xs_05`,`xs_06`, and all `xw` input features, which does not seem to affect event probability too much. 
+  
+**Examine how the response affects outcome.**
+
+```{r out.width=800, fig.width=8, fig.asp=0.40, warning=FALSE}
+df_eda %>%
+  pivot_longer(c("log_response", "response")) %>%
+  ggplot(aes(x=value, y=binary_outcome)) +
+    geom_point(size=0.5, alpha=0.1) +
+    geom_smooth(formula=y~x, method="glm", method.args=list(family=binomial)) +
+    facet_wrap(~name, scales="free", ncol=8) + xlab("")
+```
+- The `response` does have some impact on `outcome`. 
+  - Lower response associated with higher event probability.
+  - Consider using `response` as predictor for `outcome`. [feature-engineering]
+
+### Outcome vs Categorical Input
+
+**Check how the event probability is related to the customer in each region.**
+
+```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
+df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
+  ggplot(aes(x=customer)) +
+  geom_bar(aes(fill=outcome),position="fill") +
+  geom_jitter(aes(y=binary_outcome), height=0, alpha=0.2) +
+  facet_wrap(~region)
+```
+
+- It appears that `region` and `customer` does have impact on event probability. For example:
+  - Customer `G` in region `XX` has highest event probability, but fairly low in region `ZZ`.
+  - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`. 
+  - Consider interacting the two categorical inputs to predict `outcome`. [feature-engineering] 
+
+### Outcome vs Continuous and Categorical Inputs
+
+**Examine outcome based on continuous input, conditioned on region. **
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=binary_outcome, color=region)) +
+    geom_point(size=0.5, alpha=0.1) +
+    geom_smooth(formula=y~x, method="glm", method.args=list(family=binomial)) +
+    facet_wrap(~name, scales="free", ncol=8) + xlab("")
+plot_grid(p)
+```
+- The `region` changes how each input could predict the `outcome`. 
+  - Smoothed event probability trends for inputs `xs_04`, `xs_05`, `xs_06` and `xw` inputs seem to have different direction depending on `region`. 
+  - Consider interacting `region` with inputs to predict `outcome`. [feature-engineering]
+
+
+```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
+  pivot_longer(starts_with("x")) %>%
+  ggplot(aes(x=value, y=binary_outcome, color=customer)) +
+    geom_point(size=0.5, alpha=0.1) +
+    geom_smooth(formula=y~x, method="glm",
+                method.args=list(family=binomial),
+                se=F) +
+    facet_wrap(~name, scales="free", ncol=8) + xlab("")
+plot_grid(p)
+```
+
+- Similarly, the `customer` does affect how an input could predict event probability.
+  - Consider interacting `customer` with inputs to predict `outcome`. [feature-engineering]
+
+----
+
+

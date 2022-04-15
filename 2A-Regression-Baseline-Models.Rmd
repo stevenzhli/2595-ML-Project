@@ -1,0 +1,225 @@
+---
+subtitle: "Part 2A, Regression - Baseline Models"
+author: "Zhenyu Li"
+date: '2022-03-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(coefplot)
+source("./scripts/utils.R")
+theme_set(theme_linedraw())
+```
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_num_in <- setdiff(sel_num,"response")
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+sel_cat_in <- setdiff(sel_cat, "outcome")
+```
+
+----
+
+## Preprocessing
+
+- For regression, the necessary preprocessing steps include:
+  - Log-transform the continuous response
+  - Normalize continuous inputs
+
+```{r}
+df_preproc <- df %>% 
+  mutate_if(is.character,as.factor) %>% 
+  select(-c(rowid,outcome)) %>% 
+  mutate(
+    response = log(response),
+    across(starts_with("x"), scale)
+  )
+```
+
+
+## Model Fitting
+
+### Predefined Models
+
+Fit the following models
+1. Categorical variables only – linear additive
+2. Continuous variables only – linear additive
+3. All categorical and continuous variables – linear additive
+4. Interact `region` with continuous inputs, do not include `customer`
+5. Interact `customer` with continuous inputs, do not include `region`
+6. All pairwise interactions of continuous inputs, do not include categorical inputs
+
+Slice the data with certain inputs to facilitate model building. 
+
+```{r}
+df_cat <- df_preproc %>% select(-all_of(sel_num_in))
+df_num <- df_preproc %>% select(-all_of(sel_cat_in))
+df_num_region <- df_preproc %>% select(-customer)
+df_num_customer <- df_preproc %>% select(-region)
+```
+
+Fit models by providing specific formula. 
+
+```{r}
+mod_2A1 <- lm(response ~ ., df_cat)
+mod_2A2 <- lm(response ~ ., df_num)
+mod_2A3 <- lm(response ~ ., df_preproc)
+mod_2A4 <- lm(response ~ region * ., df_num_region)
+mod_2A5 <- lm(response ~ customer * ., df_num_customer)
+mod_2A6 <- lm(response ~ (.)^2, df_num)
+```
+
+Get a quick comparison using information criterion. 
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_2A"))
+calc_models_ic(my_models)
+```
+
+- Additive relationship of all inputs got best BIC;
+- Adding interaction from `region` (2a4) seem to improve AIC. 
+
+### Custom Basis Models
+
+Fit 3 custom basis models:
+- Add non-linearity to the features discussed in 1B. 
+  - `xa, xb, xn` at index `03, 05, 08`
+  - `xs` index `01, 04, 06`
+  - `xw` index `01, 02, 03`
+
+C1. Use dof 2 splines for the inputs that seem to have non-linearity effect on the response (from EDA plot).
+
+```{r}
+mod_2AC1 <- lm(
+  response ~ 
+  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) +
+  (.) , df_preproc)
+calc_models_ic(list(mod_2AC1))
+```
+
+C2. Interaction the non-linear features within each feature set.
+
+```{r}
+mod_2AC2 <- lm(
+  response ~ 
+  splines::ns(xa_03,df=2) * splines::ns(xa_05,df=2) * splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) * splines::ns(xb_05,df=2) * splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) * splines::ns(xn_05,df=2) * splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) * splines::ns(xs_04,df=2) * splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) * splines::ns(xw_02,df=2) * splines::ns(xw_03,df=2) +
+  (.) , df_preproc)
+calc_models_ic(list(mod_2AC2))
+```
+C3. Add interaction from `region` to all linear additive features from C1. 
+
+```{r}
+mod_2AC3 <- lm(
+  response ~ region * (
+  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) +
+  (.)) , df_preproc)
+calc_models_ic(list(mod_2AC3))
+```
+C4. Linearly add the interaction of `region` and `customer` to the features from C1. 
+
+```{r}
+mod_2AC4 <- lm(
+  response ~ region * customer + ( 
+  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) +
+  (.)) , df_preproc)
+calc_models_ic(list(mod_2AC4))
+```
+
+C5. Interact `region` with non-linear features from C1, then add the linear features. 
+
+```{r}
+mod_2AC5 <- lm(
+  response ~ region * (
+  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
+  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
+  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
+  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
+  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)) +
+  (.), df_preproc)
+calc_models_ic(list(mod_2AC5))
+```
+C6. Pair-wise interaction including all variables. 
+
+```{r}
+mod_2AC6 <- lm(response ~ (.)^2, df_preproc)
+calc_models_ic(list(mod_2AC6))
+```
+
+----
+
+## Conclusions
+
+Save models and print out the model metrics.
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_2A"))
+save_models(my_models)
+calc_models_ic(my_models) %>% knitr::kable()
+```
+
+
+### Model Selection
+
+- Metrics
+  - Use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling. 
+- Special case
+  - The all-pairwise model (`mod_2AC6`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis, but includes it for resampling at state 2D. 
+  - Thus for Bayesian analysis, I will choose next lowest AIC, next lowest BIC, and one with combination of both. 
+
+- Best models
+  - Based on the BIC, select `mod_2A3`.
+  - Based on the AIC, select `mod_2AC5`. 
+  - Based on balance of the two, select `mod_2AC1`
+
+### How does the coefficient summaries compare between the top 3?
+
+Visualize the coefficient summaries for your top 3 models. 
+
+```{r out.width= 300, fig.width=3, fig.asp=1.2}
+coefplot(mod_2A3)
+coefplot(mod_2AC5)
+coefplot(mod_2AC1)
+```
+### Which inputs seem important?
+
+From the 3 selected models, filter the coefficients for those within 99% confidence interval. 
+
+```{r}
+find_models_signif_coef(list(mod_2A3,mod_2AC5,mod_2AC1), 0.01)
+```
+
+- For categorical inputs, both the `region`, `customer` seem important. 
+- For continuous inputs, linear features of `xb_04`,`xb_07`, `xw_01`, `xa_02`, and non-linear features of `xw_01`, `xn_05`, `xn_08` seem important. 
+
+
+If we use a more relaxed confidence interval we'll get more coefficients that are potentially important. 
+
+```{r}
+find_models_signif_coef(list(mod_2A3,mod_2AC5,mod_2AC1), 0.05)
+```
+
+- We see coefficients from some interactions and more non-linear features are captured.  
+
+----
