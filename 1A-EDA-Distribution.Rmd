@@ -138,7 +138,7 @@ summ_nume %>% knitr::kable(caption = "numeric variables overview")
 
 - There is no missing value in all numeric variables.
 - All sentiment derived features are numeric.
-  - They are at different scales, and need to be normalized. [preprocessing]
+  - They are at different scales, and need to be standardized. [preprocessing]
   - Most are clearly continuous, but some may be discrete (very limited unique values).
 
 **Examine the variables with less than 5% unique values.**
@@ -158,8 +158,9 @@ df_eda %>% select(all_of(cols_tmp)) %>% lapply(unique) %>% lapply(sort)
 ```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
-  ggplot(aes(x=value,fill=region)) +
-    geom_histogram(bins=50) +
+  ggplot(aes(x=value)) +
+    # geom_density(aes(color=region), bins=50) +
+    geom_histogram(aes(fill=region), bins=50) +
     facet_wrap(~name, scales="free", ncol=8) +
     ylab("") + xlab("")
 plot_grid(p)
@@ -179,7 +180,7 @@ plot_grid(p)
 
 - Most features look normally distributed, except:
   - The `xw` that corresponds to word count data, which is lower-bounded by 0. Two of them `xw_02`, `xw_03` look quite skewed.
-  - The `xs_05` looks like it has 0 as lower bounded.
+  - The `xs_05` looks like it also has 0 as lower bound.
 - The four numeric categorical inputs are manifested by the separated bins found on `xb_02`,`xb_03`,`xn_02`,`xn_03`.
 - Inputs are not uniform across the `region` category. 
 

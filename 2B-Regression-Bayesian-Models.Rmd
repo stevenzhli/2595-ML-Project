@@ -1,7 +1,7 @@
 ---
 subtitle: "Part 2B, Regression - Bayesian Models"
 author: "Zhenyu Li"
-date: '2022-03-29'
+date: '2022-04-12'
 output: html_document
 ---
 
@@ -32,7 +32,7 @@ sel_cat_in <- setdiff(sel_cat, "outcome")
 
 - For regression, the necessary preprocessing steps include:
   - Log-transform the continuous response
-  - Normalize continuous inputs
+  - Standardize continuous inputs
 
 ```{r}
 df_preproc <- df %>% 
@@ -49,78 +49,158 @@ df_preproc <- df %>%
 ## Bayesian Model Fitting
 
 Select two models from 2A for Bayesian model fitting. 
-- Model `mod_2A3` and `mod_2AC1`
-- The `mod_2AC1` has non-linearity added to continuous inputs. We could see if this help to reduce the uncertainty in the models. 
+- Select models `mod_2A3` and `mod_2AC3`. 
+  - Model `mod_2A3` is best model according to BIC, which consist of only linear additive of linear inputs. 
+  - Model `mod_2AC3` is best model according to AIC, by adding interaction from `region` to non-linear features. 
+  - Model `mod_2AC5` has intermediate AIC/BIC result, by removing the non-linear features while maintaining the interaction. We shall see if this helps to reduce model uncertainty. 
+- Use weak prior R-squared of 0.5. 
 
 ```{r}
+mod_2A3 <- readr::read_rds("models/mod_2A3")
+mod_2AC3 <- readr::read_rds("models/mod_2AC3")
+mod_2AC5 <- readr::read_rds("models/mod_2AC5")
+```
+
+
+- Based on model `mod_2A3`, with linear additive of all inputs.
+
+```{r model 2B1}
 mod_2B1 <- stan_lm(
-  response ~ ., df_preproc, # like mod_2A3
+  mod_2A3$call$formula,
+  data=df_preproc,
   prior = R2(location = 0.5),
-  seed = 2095
+  seed = 1324
 )
 ```
 
 
+- Based on model `mod_2AC3`
 
-```{r}
+```{r model 2B2}
 mod_2B2 <- stan_lm(
-  response ~ 
-  splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) + 
-  splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) +
-  splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) +
-  splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) +
-  splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) +
-  (.) , df_preproc, 
+  mod_2AC3$call$formula,
+  data=df_preproc, 
   prior = R2(location = 0.5),
-  seed = 2095
+  seed = 1324
 )
 ```
 
-## Examine Models
 
-### Coefficients
+- Based on model `mod_2AC5`. 
+
+```{r model 2B3}
+mod_2B3 <- stan_lm(
+  mod_2AC5$call$formula,
+  data=df_preproc, 
+  prior = R2(location = 0.5),
+  seed = 1324
+)
+```
+
+### Save the Models
+
+- Save the models to file
 
 ```{r}
-posterior_interval(mod_2B1)
+my_models <- mget(ls(pattern = "^mod_2B"))
+save_models(my_models)
 ```
-
-```{r}
-posterior_interval(mod_2B2)
-```
-
-```{r out.width= 300, fig.width=3, fig.asp=1.2}
-plot(mod_2B1) +
-  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = .5)
-```
-
-```{r out.width= 300, fig.width=3, fig.asp=1.2}
-plot(mod_2B2) + 
-  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = .5)
-```
-
-### Coefficient Correlation
-
-```{r out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
-mod_2B1 %>% as_tibble() %>% 
-  select(all_of(names(mod_2B1$coefficients))) %>% 
-  cor() %>% corrplot(method="color", type="upper")
-```
-
-----
 
 ## Conclusions
 
-- Identify the best model
-  - Which performance metric did you use to make your selection?
+```{r}
+mod_2B1 <- readr::read_rds("models/mod_2B1")
+mod_2B2 <- readr::read_rds("models/mod_2B2")
+mod_2B3 <- readr::read_rds("models/mod_2B3")
+```
+
+### Model Comparison
+
+- Metrics  
+  - I would choose WAIC (information criterion) for model selection, since at this stage we use training set only, without any resampling.  
 
 ```{r}
-waic(mod_2B1)
-waic(mod_2B2)
+mod_2B1$waic <- waic(mod_2B1)
+mod_2B2$waic <- waic(mod_2B2)
+mod_2B3$waic <- waic(mod_2B3)
 ```
+
+```{r}
+my_models <- stanreg_list(
+  mod_2B1, mod_2B2, mod_2B3,
+  model_names = c("2B1, all linear","2B2, region: non-linear","2B3, region: some linear"))
+loo_compare(my_models, criterion = "waic")
+```
+
+- Based on WAIC, model `mod_2B3` with interaction from `region` to some of the linear features is the best model.   
+- For the other two models, the performance difference are both greater than the respective s.e. on the difference from the best model. Thus `mod_2B3` is indeed the best one among the three as identified by WAIC.  
+
+
+### Best Model
+
+Analyze the posterior behavior of the best model. 
+
+#### R-squared
+
+```{r}
+bayes_R2(mod_2B3) %>% quantile(c(0.05, 0.5, 0.95))
+```
+
+- Data changed our prior belief about the model uncertainty (R-squared).  
+  - Posterior lower 5th quantile at 0.65, while prior belief was 0.5 for R-squared.  
+
+#### Coefficients
 
 - Visualize the regression coefficient posterior summary statistics for your best model.
 
-- For your best model:
+```{r Uncertainty, out.width=400, fig.width=4, fig.asp=2}
+plot(mod_2B3, pars = names(mod_2B3$coefficients)) +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 0.5)
+```
+
+
+- Check the correlation of the posterior coefficients.  
+
+```{r Correlations, out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
+mod_2B3 %>% as_tibble() %>% 
+  select(all_of(names(mod_2B3$coefficients))) %>% 
+  cor() %>% corrplot(method="color", type="upper")
+```
+
+- Some positive correlation of `customers`. 
+
+#### Model Uncertainty
+
+- Tasks  
   - Study the posterior uncertainty in the noise (residual error), 𝜎.
   - How does the `lm()` maximum likelihood estimate (MLE) on 𝜎 relate to the posterior uncertainty on 𝜎 ?
   - Do you feel the posterior is precise or are we quite uncertain about 𝜎
+
+- Visualize the σ posterior distribution across all 3 models. 
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_2B"))
+my_models %>% pull_bayes_posterior_sigma() %>% 
+  ggplot(aes(x = sigma)) +
+  geom_freqpoly(aes(color = model),bins = 50) +
+  geom_vline(xintercept = sigma(mod_2AC5), color="#4D9EFF", linetype="dotted", size=0.5) +
+  geom_vline(xintercept = sigma(mod_2B3), color="#4D9EFF", linetype="dashed", size=0.5) +
+  geom_vline(xintercept = sigma(mod_2B2), color="#00BE0F", linetype="dashed", size=0.5)
+```
+
+- Model `mod_2B2` has the lowest posterior σ mode (green dashed line). 
+  - The amount of uncertainty is similar for all three models, spanning the range of about 0.04. 
+  - Thus the posterior σ is fairly precise as none spans a large range. 
+
+- For the best model identified using WAIC `mod_2B3`:
+  - The posterior mode of σ from the Bayesian model is around 0.299 (blue dashed line).
+  - The corresponding MLE estimated σ is 0.292 (blue dotted line).
+  - The MLE underestimated σ: there is 81.2% chance σ is greater than the MLE estimate, judging from the posterior samples. 
+
+```{r}
+sprintf("Posterior mode σ: %.3f", sigma(mod_2B3))
+sprintf("MLE estimated σ: %.3f", sigma(mod_2AC5))
+
+my_mod_sigma <- mod_2B3 %>% as_tibble() %>% select(sigma)
+sprintf("Probability of posterior σ > MLE σ: %.3f%%", mean(my_mod_sigma >= sigma(mod_2AC5))*100)
+```

@@ -127,7 +127,7 @@ df_eda %>%
 - This basically reflects how the `response` correlates to `region` in a prevoius plot. 
 
 
-### Response vs Continuous and Categorical Inputs
+### Response vs ALL Inputs
 
 **Log-transformed response from each continuous input, conditioned on region. **
 
@@ -137,7 +137,7 @@ p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   ggplot(aes(x=value, y=log_response, color=region)) +
     # geom_boxplot(aes(group=cut_number(value,12), y=response), size=0.2, alpha=0.1) +
     geom_point(size=0.5, alpha=0.2) +
-    geom_smooth(formula=y~x,method="lm") +
+    geom_smooth(formula=y~x, method="loess") +
     facet_wrap(~name, scales="free", ncol=8) +
     xlab("")
 plot_grid(p)
@@ -219,7 +219,7 @@ df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
   - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`. 
   - Consider interacting the two categorical inputs to predict `outcome`. [feature-engineering] 
 
-### Outcome vs Continuous and Categorical Inputs
+### Outcome vs ALL Inputs
 
 **Examine outcome based on continuous input, conditioned on region. **
 
