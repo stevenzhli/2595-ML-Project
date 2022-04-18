@@ -1,5 +1,5 @@
 ---
-subtitle: "Part 2B, Regression - Bayesian Models"
+subtitle: "Part 2C, Regression - Model Predictions"
 author: "Zhenyu Li"
 date: '2022-04-15'
 output: html_document
@@ -36,7 +36,7 @@ my_inputs <- setdiff(names(df_preproc),"response")
   - Decided to use Bayesian models from 2B for prediction.  
 
 - Choose two with similar posterior σ but different features
-  - One with `region` interacting inputs with non-linear basis (quadratic) `mod_2B2`. 
+  - One with `region` interacting inputs with non-linear basis (2 dof natural spline) `mod_2B2`. 
   - One with `region` interacting with same set of inputs but without the non-linear basis `mod_2B3`. 
     - This is the best model identified by WAIC.  
 
@@ -87,6 +87,10 @@ mod_2B3 %>% as_tibble() %>%
   2. xb_07, customer (linear, category)
   3. xa_08, xb_07, region (nonlinear, linear, category)
   4. xw_01, xb_05, region (nonlinear, nonlinear, category)
+
+- Note: since all continuous inputs are standardized to train the models, the prediction test grid is just created at the same standardized scale using the preprocessed dataset. The predictors thus have the standardized scales, not the actual scale from the original data set. But the trends should remain. 
+
+----
 
 ## Predictions
 

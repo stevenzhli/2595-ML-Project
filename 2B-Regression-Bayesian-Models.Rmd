@@ -204,3 +204,5 @@ sprintf("MLE estimated σ: %.3f", sigma(mod_2AC5))
 my_mod_sigma <- mod_2B3 %>% as_tibble() %>% select(sigma)
 sprintf("Probability of posterior σ > MLE σ: %.3f%%", mean(my_mod_sigma >= sigma(mod_2AC5))*100)
 ```
+
+
