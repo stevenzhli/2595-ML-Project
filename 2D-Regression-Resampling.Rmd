@@ -1,0 +1,179 @@
+---
+subtitle: "Part 2D, Regression - Resampling"
+author: "Zhenyu Li"
+date: '2022-04-18'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+theme_set(theme_linedraw())
+library(tidymodels)
+tidymodels_prefer()
+source("./scripts/utils.R")
+```
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+df_regr <- df %>% select(-c(rowid,outcome)) # remove rowid and outcome from training data
+```
+
+## Linear Models
+
+- I choose `tinymodels` to train and tune the models.
+- For linear models, write out formula for each model w.r.t. the `df_regr` input data frame for reference.
+
+### Model Formulae
+
+- Predefined linear models
+  - `2D1`: All categorical and continuous inputs - linear additive features
+     `response ~ .`
+  - `2D2`: All pairwise interactions of continuous inputs, include additive categorical features
+     `response ~ (. - region - customer)^2 + region + customer`
+  
+- Custom linear models: 3 models selected from 2A)
+  - `2D3`: Interact `region` with only the nonlinear features, additive for the rest (`mod_2AC3`)
+    ```
+    response ~ . + region :
+      ( splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2)
+      + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
+      + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
+      + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
+      + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) ) 
+      - xa_03 - xa_05 - xa_08 
+      - xb_03 - xb_05 - xb_08 
+      - xn_03 - xn_05 - xn_08
+      - xs_01 - xs_04 - xs_06
+      - xw_01 - xw_02 - xw_03
+    ```
+  - `2D4`: Interact `region` with nonlinear inputs without the nonlinear basis. (`mod_2AC5`)
+    ```
+    response ~ . + region : (
+      xa_03 + xa_05 + xa_08
+      + xb_03 + xb_05 + xb_08
+      + xn_03 + xn_05 + xn_08
+      + xs_01 + xs_04 + xs_06
+      + xw_01 + xw_02 + xw_03 )
+      - xa_03 - xa_05 - xa_08 
+      - xb_03 - xb_05 - xb_08 
+      - xn_03 - xn_05 - xn_08
+      - xs_01 - xs_04 - xs_06
+      - xw_01 - xw_02 - xw_03
+    ```
+  - `2D5`: All pairwise interactions for all input variables. (`mod_2AC6`)
+    ```
+    response ~ (.)^2
+    ```
+
+### Training Setup
+
+#### Resampling Scheme
+
+- Use 5 fold, 5 repeated cross-validation
+- Will compare RMSE, MAE and R-Squared
+
+```{r}
+set.seed(2543)
+cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
+my_metrics <- metric_set(rmse, mae, rsq)
+```
+
+#### Model Specification
+
+```{r}
+lm_spec <- linear_reg() %>% set_engine("lm")
+```
+
+### Feature Engineering
+
+- Create the blueprint for data preprocessing & feature engineering.  
+
+```{r mod_2D1}
+bp_2D1 <- recipe(response ~ ., data=df_regr) %>% 
+  step_log(all_outcomes()) %>% 
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
+  # prep(training=df_regr, retain=T) %>% bake(new_data=NULL)
+```
+
+```{r mod_2D2}
+bp_2D2 <- bp_2D1 %>% 
+  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":")
+```
+
+```{r}
+# select inputs that show nonlinear relation to response
+nonlin_pred <- c(
+  "xa_03","xa_05","xa_08",
+  "xb_03","xb_05","xb_08",
+  "xn_03","xn_05","xn_08",
+  "xs_01","xs_04","xs_06",
+  "xw_01","xw_02","xw_03")
+```
+
+```{r mod_2D3}
+bp_2D3 <- bp_2D1 %>% 
+  step_ns(all_of(nonlin_pred), deg_free = 2) %>% 
+  step_interact( ~ region:contains("_ns_"), sep = ":") %>% 
+  step_rm(region)
+```
+
+```{r mod_2D4}
+bp_2D4 <- bp_2D1 %>% 
+  step_interact( ~ region:all_of(nonlin_pred), sep = ":") %>% 
+  step_rm(all_of(nonlin_pred)) %>% 
+  step_rm(region)
+```
+
+#### Workflow
+
+```{r}
+wf_lm_2D1 <- workflow() %>% 
+  add_model(lm_spec) %>% 
+  add_recipe(bp_2D1)
+```
+
+### Execute Training
+
+```{r}
+mod_2D1_cv <- wf_lm_2D1 %>% fit_resamples(
+  cv_folds,
+  metrics = my_metrics,
+  control = control_resamples(save_pred = T)
+)
+
+mod_2D1 <- wf_lm_2D1 %>% fit(df_regr)
+```
+
+### TEST #2
+
+
+### Training Result
+
+```{r}
+mod_2D1_cv %>% collect_metrics()
+```
+
+
+
+----
+
+## Elastic Net
+
+- Regularized regression with Elastic net
+  - All pairwise interactions of continuous inputs, include additive categorical features
+  - The more complex of the 2 models selected from iiA)
+  
+## Advanced Models
+
+- Neural network
+- Random forest
+- Gradient boosted tree
+- 2 methods of your choice that we did not explicitly discuss in lecture
+
+
+
