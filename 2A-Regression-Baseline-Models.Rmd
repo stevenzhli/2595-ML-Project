@@ -65,11 +65,12 @@ df_num <- df_preproc %>% select(-all_of(sel_cat_in))
 - Fit models by providing specific formula.  
 
 ```{r}
+# fit the predefined models
 mod_2A1 <- lm(response ~ ., df_cat)
 mod_2A2 <- lm(response ~ ., df_num)
 mod_2A3 <- lm(response ~ ., df_preproc)
-mod_2A4 <- lm(response ~ region * (. -customer), df_preproc)
-mod_2A5 <- lm(response ~ customer * (. -region), df_preproc)
+mod_2A4 <- lm(response ~ (region) * (. -customer), df_preproc)
+mod_2A5 <- lm(response ~ (customer) * (. -region), df_preproc)
 mod_2A6 <- lm(response ~ (.)^2, df_num)
 ```
 
@@ -85,7 +86,7 @@ calc_models_ic(my_models)
 
 ### Custom Basis Models
 
-- Fit 6 custom basis models
+- Fit 4 custom basis models
 
 - Input features that involve some non-linearity from EDA are
   - `xa, xb, xn` at index `03, 05, 08`
@@ -95,37 +96,47 @@ calc_models_ic(my_models)
 - Add non-linearity using quadratic (2 degree polynomial) to these inputs, keep linear for the rest.
   - Use linear additive relationships for all features.
 
-```{r model 2AC1}
-mod_2AC1 <- lm(
+```{r model 2Ac1}
+mod_2Ac1 <- lm(
   response ~ . + 
-    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) - xa_03 - xa_05 - xa_08 
-    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) - xb_03 - xb_05 - xb_08 
-    + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) - xn_03 - xn_05 - xn_08
-    + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) - xs_01 - xs_04 - xs_06
-    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) - xw_01 - xw_02 - xw_03
-  , df_preproc)
-calc_models_ic(list(mod_2AC1))
+    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) 
+    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) 
+    + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
+    + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
+    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)
+    - xa_03 - xa_05 - xa_08
+    - xb_03 - xb_05 - xb_08
+    - xn_03 - xn_05 - xn_08
+    - xs_01 - xs_04 - xs_06
+    - xw_01 - xw_02 - xw_03,
+  data=df_preproc)
+calc_models_ic(list(mod_2Ac1))
 ```
 
-- Add interaction from region and customer, keep the rest as 2AC1.  
+- Add interaction from region and customer, keep the rest as 2Ac1.  
 
-```{r model 2AC2}
-mod_2AC2 <- lm(
-    response ~ region * customer + .
-    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) - xa_03 - xa_05 - xa_08 
-    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) - xb_03 - xb_05 - xb_08 
-    + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2) - xn_03 - xn_05 - xn_08
-    + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2) - xs_01 - xs_04 - xs_06
-    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) - xw_01 - xw_02 - xw_03
-  , df_preproc)
-calc_models_ic(list(mod_2AC2))
+```{r model 2Ac2}
+mod_2Ac2 <- lm(
+    response ~ region * customer + . - region - customer
+    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2)
+    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
+    + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
+    + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
+    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)
+    - xa_03 - xa_05 - xa_08 
+    - xb_03 - xb_05 - xb_08 
+    - xn_03 - xn_05 - xn_08
+    - xs_01 - xs_04 - xs_06
+    - xw_01 - xw_02 - xw_03,
+  df_preproc)
+calc_models_ic(list(mod_2Ac2))
 ```
 
-- Interact `region` with the nonlinear features from 2AC1, additive for the rest. 
+- Interact `region` with the nonlinear features from 2Ac1, additive for the rest. 
 
-```{r model 2AC3}
-mod_2AC3 <- lm(
-  response ~ . + region :
+```{r model 2Ac3}
+mod_2Ac3 <- lm(
+  response ~ . - region + region :
     ( splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2)
     + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
     + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
@@ -137,53 +148,14 @@ mod_2AC3 <- lm(
     - xs_01 - xs_04 - xs_06
     - xw_01 - xw_02 - xw_03, 
   df_preproc)
-calc_models_ic(list(mod_2AC3))
-```
-
--  Interact `region` to the linear inputs from 2AC1, additive for the rest.  
-
-```{r model 2AC4}
-mod_2AC4 <- lm(
-  response ~ customer + 
-    + region : (. - customer 
-      - xa_03 - xa_05 - xa_08
-      - xb_03 - xb_05 - xb_08
-      - xn_03 - xn_05 - xn_08
-      - xs_01 - xs_04 - xs_06
-      - xw_01 - xw_02 - xw_03 )
-    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) 
-    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) 
-    + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
-    + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
-    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)
-  , df_preproc)
-calc_models_ic(list(mod_2AC4))
-```
-
-- Interact `region` with inputs showing nonlinear relationship to response, but do not use nonlinear basis.  
-
-```{r model 2AC5}
-mod_2AC5 <- lm(
-  response ~ . + region : (
-    + xa_03 + xa_05 + xa_08
-    + xb_03 + xb_05 + xb_08
-    + xn_03 + xn_05 + xn_08
-    + xs_01 + xs_04 + xs_06
-    + xw_01 + xw_02 + xw_03 )
-    - xa_03 - xa_05 - xa_08 
-    - xb_03 - xb_05 - xb_08 
-    - xn_03 - xn_05 - xn_08
-    - xs_01 - xs_04 - xs_06
-    - xw_01 - xw_02 - xw_03, 
-  df_preproc)
-calc_models_ic(list(mod_2AC5))
+calc_models_ic(list(mod_2Ac3))
 ```
 
 - Pair-wise interaction for all input variables. 
 
-```{r model 2AC6}
-mod_2AC6 <- lm(response ~ (.)^2, df_preproc)
-calc_models_ic(list(mod_2AC6))
+```{r model 2Ac4}
+mod_2Ac4 <- lm(response ~ (.)^2, df_preproc)
+calc_models_ic(list(mod_2Ac4))
 ```
 
 ### Save the Models
@@ -206,12 +178,10 @@ mod_2A3 <- readr::read_rds("models/mod_2A3")
 mod_2A4 <- readr::read_rds("models/mod_2A4")
 mod_2A5 <- readr::read_rds("models/mod_2A5")
 mod_2A6 <- readr::read_rds("models/mod_2A6")
-mod_2AC1 <- readr::read_rds("models/mod_2AC1")
-mod_2AC2 <- readr::read_rds("models/mod_2AC2")
-mod_2AC3 <- readr::read_rds("models/mod_2AC3")
-mod_2AC4 <- readr::read_rds("models/mod_2AC4")
-mod_2AC5 <- readr::read_rds("models/mod_2AC5")
-mod_2AC6 <- readr::read_rds("models/mod_2AC6")
+mod_2Ac1 <- readr::read_rds("models/mod_2Ac1")
+mod_2Ac2 <- readr::read_rds("models/mod_2Ac2")
+mod_2Ac3 <- readr::read_rds("models/mod_2Ac3")
+mod_2Ac4 <- readr::read_rds("models/mod_2Ac4")
 ```
 
 ### Model Comparison
@@ -227,13 +197,13 @@ calc_models_ic(my_models) %>% knitr::kable()
   - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling. 
 
 - Special case
-  - The all-pairwise model (`mod_2AC6`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling (2D). 
+  - The all-pairwise model (`mod_2Ac4`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling in 2D). 
   - For here, I will skip it too, and examine models with second lowest AIC, second lowest BIC, and one in between for both.
 
 - Best models
   - Based on the BIC, select `mod_2A3`.
-  - Based on the AIC, select `mod_2AC3`. 
-  - Based on balance of the two, select `mod_2AC5`
+  - Based on the AIC, select `mod_2Ac3`. 
+  - Based on balance of the two, select `mod_2Ac1`
 
 ### Coefficient Plot
 
@@ -241,28 +211,31 @@ Visualize the coefficient summaries for the top 3 models.
 
 ```{r out.width=500, fig.width=5, fig.asp=1}
 coefplot(mod_2A3)
-coefplot(mod_2AC3)
-coefplot(mod_2AC5)
+coefplot(mod_2Ac1)
+coefplot(mod_2Ac3)
 ```
 
 - Each model contains some significant coefficients, but it looks like majority of them are non-significant.
-  - Majority of coefficients are small (within 0.5).  
+- For the linear feature additive only model (`mod_2A3`) the coefficients are quite small, within 1. 
+- For the two custom basis model with the nonlinear features coefficients are larger. 
+- One interesting observation is that adding nonlinear features (mod_2Ac1) seem to have caused the `region` coefficients to become more uncertain from the all linear additive model (mod_2A3).  
 
 ### Important Features
 
 - Filter each model for significant coefficients (uncertainty interval do not span 0).  
   - Then rank by their estimated coefficients in descending order.  
-  - Those with higher coefficients indicate more importance.  
+  - Those with higher coefficients indicate more impact on the response since the inputs are standardized.   
 
 ```{r}
-pull_lm_coefs_signif(mod_2A3, 0.99)
-pull_lm_coefs_signif(mod_2AC3, 0.99)
-pull_lm_coefs_signif(mod_2AC5, 0.99)
+pull_lm_coefs_signif(mod_2A3, 0.95)
+pull_lm_coefs_signif(mod_2Ac1, 0.95)
+pull_lm_coefs_signif(mod_2Ac3, 0.95)
 ```
 
-- For categorical inputs, both the `region`, `customer` are important. 
-- For continuous inputs, potential important ones are:
-  - `xw_01`, `xb_04`, `xb_07`, `xa_02`, `xb_03`, `xs_04`
-- It is also notable that interaction from `region` to some inputs are important. 
+- For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`. 
+- For categorical inputs, it depends on the continuous features:
+  - If we use original continuous inputs (`mod_2A3`), both the `region`, `customer` are important. 
+  - As mentioned, when nonlinear features were added (`mod_2Ac1`), the `region` coefficients become more uncertain.  
+  - Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important. 
 
 ----
