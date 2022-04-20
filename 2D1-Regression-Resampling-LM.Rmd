@@ -19,15 +19,17 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove rowid and outcome from training data
+df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
 ```
-- I choose `tidymodels` to train and tune the models.
 
 ## Linear Models
 
-### Feature Engineering
+- In this file, I will fit the 2 predefined linear models and 3 custom basis linear models from earlier. 
+- I will compare the model performances derived from resampling.   
 
-Create the blueprints for data preprocessing & feature engineering.  
+## Feature Engineering
+
+- Create the blueprints for data preprocessing & feature engineering.  
 
 #### Predefined linear models
 
@@ -48,7 +50,7 @@ bp_2D2 <- bp_2D1 %>%
   step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":")
 ```
 
-#### Custom linear models: 3 models from 2A
+#### Custom linear models
 
 - Import previous models that are referenced here.
 
@@ -58,7 +60,7 @@ mod_2Ac3 <- readr::read_rds("./models/mod_2Ac3")
 mod_2Ac4 <- readr::read_rds("./models/mod_2Ac4")
 ```
 
-- Create vector of input names that need nonlinear features
+- Get input names that need nonlinear features together.
 
 ```{r}
 nonlin_pred <- c("xa_03","xa_05","xa_08",
@@ -88,6 +90,7 @@ bp_2D4_2Ac3 <- bp_2D1 %>%
   step_dummy(region, one_hot = T) %>% 
   step_dummy(customer, one_hot = F) %>% 
   step_interact( ~ starts_with("region"):contains("_ns_"), sep = ":") %>% 
+  # remove the additive nonlinear features and the regions
   step_rm(starts_with("x") & contains("_ns_")) %>% 
   step_rm(ends_with("XX"), ends_with("YY"), ends_with("ZZ"))
 
@@ -100,93 +103,126 @@ coef(mod_2Ac3) %>% length()
 
 ```{r mod_2D5}
 bp_2D5_2Ac4 <- bp_2D1 %>% 
-  step_interact( ~ all_predictors():all_predictors(), sep=":") %>% 
-  step_dummy(all_nominal_predictors())
-
+  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_interact( ~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>% 
+  step_interact( ~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>% 
+  step_interact( ~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
+  
 # check # of features with corresponding model (+response -intercept)
 bp_2D5_2Ac4 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% ncol()
 coef(mod_2Ac4) %>% length()
 ```
 
+## Resampling
 
-### Training
-
-#### Training Setup
+### Setup
 
 - Resampling Scheme
-  - Use 5 fold, 5 repeated cross-validation
-  - Will compare RMSE, MAE and R-Squared
+  - Use 5 fold cross-validation with 5 repeats for resampling.
+  - Will compare RMSE, MAE and R-Squared metrics.
+  - Model specification:
+    - Use `lm` engine to fit the models.
 
-```{r cv setup}
+```{r resample setup}
 set.seed(2543)
 cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5) 
 my_metrics <- metric_set(rmse, mae, rsq)
+lm_spec <- linear_reg() %>% set_engine("lm")
 ```
 
-- Model Specification
-  - Use `lm` engine
+- Create workflow set for the linear models to fit. 
 
-```{r model setup}
-lm_model <- linear_reg() %>% set_engine("lm")
+```{r workflow set}
+lm_wset <- workflow_set(
+  preproc = list(
+    all_additive = bp_2D1,
+    all_cont_pairwise = bp_2D2,
+    nonlin_additive = bp_2D3_2Ac1,
+    region_interact = bp_2D4_2Ac3,
+    all_pairwise = bp_2D5_2Ac4
+    ), 
+  models = list(lm = lm_spec)
+  )
 ```
 
-- Create workflow set for the linear models to train. 
+### Execute
 
-```{r workflowset}
-bp_set_lm <- list(
-  all_additive = bp_2D1,
-  all_cont_pairwise = bp_2D2,
-  nonlin_additive = bp_2D3_2Ac1,
-  region_interact = bp_2D4_2Ac3,
-  all_pairwise = bp_2D5_2Ac4
-)
-wf_set_lm <- workflow_set(preproc = bp_set_lm, models = list(lm = lm_model))
-```
+- Operate on the workflow set to fit and resample. 
 
-#### Start Training
-
-- Operate on the workflow set to perform fitting and cross-validation. 
-
-```{r resampling}
-cv_lm <- wf_set_lm %>% 
+```{r message=FALSE, warning=FALSE}
+lm_cv_2D <- lm_wset %>% 
   workflow_map(
     fn = "fit_resamples",
     resamples = cv_folds, 
     metrics = my_metrics,
-    control = control_resamples(save_pred = T)
+    control = control_resamples(save_pred = F)
   )
 ```
 
-### Conclusions
+```{r save result}
+readr::write_rds(lm_cv_2D,"./models/lm_cv_2D")
+```
+
+## Conclusions
+
+```{r}
+lm_cv_2D <- readr::read_rds("./models/lm_cv_2D")
+```
+
+### Comparison
 
 - Visualize and compare performances across 5 linear models.
   - Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale. 
 
-```{r out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
-cv_lm %>% collect_metrics() %>% 
+```{r performance 1, out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
+lm_cv_2D %>% collect_metrics() %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
   facet_wrap( ~ .metric, scales = "free_y") +
   scale_y_log10() +
-  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+  labs(color="model")
 ```
 
 - Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
 
-```{r out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
-cv_lm %>% collect_metrics() %>% 
+```{r performance 2, out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
+lm_cv_2D %>% collect_metrics() %>% 
   filter(!grepl("_pairwise_", wflow_id)) %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
   geom_linerange(aes(ymin=mean-std_err,ymax=mean+std_err)) +
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
   facet_wrap( ~ .metric, scales = "free_y") +
-  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
+  labs(color="model")
 ```
 
 - Judging from both MAE and RMSE, the best model should be the nonlinear additive model (green, `mod_2D3_2Ac1`). 
   - With RMSE, both all linear additive model (red, `mod_2D1`), and the nonlinear additive models are good. The model with `region` interaction to nonlinear features (blue, `mod_2D4_2Ac3`) resulted high RMSE. 
-  
+  - For R-Squared, there is no statistically significant difference between the three models. 
+
+### Best Model
+
+- Retrain the best model with predictions saved.
+
+```{r}
+lm_best_wflow_mae <- "nonlin_additive_lm"
+
+lm_best_2D <- lm_wset %>% 
+  extract_workflow(lm_best_wflow_mae) %>% 
+  fit_resamples(
+    cv_folds,
+    metrics = my_metrics,
+    control = control_resamples(save_pred = T)
+  )
+
+lm_best_2D %>% collect_metrics() %>% select(-.config, -.estimator)
+```
+
+```{r}
+save_models(list(lm_best_2D = lm_best_2D))
+```
+
 ----
-
-
