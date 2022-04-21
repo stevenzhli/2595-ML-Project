@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 2D2, Regression - Resampling - ENET"
 author: "Zhenyu Li"
 date: '2022-04-20'
@@ -24,10 +25,11 @@ df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
 
 ## Elastic Net
 
-- In this file, I'll use Elastic Net to provide regularization to the two complex models that resulted extreme poor performances during the resampling. 
-- Since larger errors is expected from this training set, I will use MAE for model tuning in next steps.
+Use Elastic Net to provide regularization to the two complex models that resulted extreme poor performances during the resampling.  
 
 ### Models
+
+**Define the linear models to tune with Elastic Net.**  
 
 - The preprocessing steps
 
@@ -38,7 +40,7 @@ bp_2D1 <- recipe(response ~ ., data=df_regr) %>%
   step_scale(all_numeric_predictors())
 ```
 
-- `2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
+- `mod_2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   - Must manually create the dummy variables for `glmnet` to work properly.
   
 ```{r mod_2D2}
@@ -47,7 +49,7 @@ bp_2D2 <- bp_2D1 %>%
   step_dummy( all_nominal_predictors() )
 ```
 
-- `2D5_2Ac4`: All pairwise interactions for all input variables. (`mod_2Ac4`)
+- `mod_2D5_2Ac4`: All pairwise interactions for all input variables. (`mod_2Ac4`)
 
 ```{r mod_2D5}
 bp_2D5_2Ac4 <- bp_2D1 %>% 
@@ -62,7 +64,9 @@ bp_2D5_2Ac4 <- bp_2D1 %>%
 
 ### Explore
 
-- First use Lasso to explore the range for parameter tuning.
+**First use Lasso to explore the range for parameter tuning.**
+
+Define the Lasso only model specification.  
 
 ```{r}
 lasso_explore_spec <- 
@@ -70,7 +74,7 @@ lasso_explore_spec <-
   set_engine("glmnet", intercept = TRUE)
 ```
 
-- Fit both models
+Fit both models with Lasso.
 
 ```{r}
 lasso_fit_2D2 <- workflow() %>% 
@@ -84,7 +88,7 @@ lasso_fit_2D5 <- workflow() %>%
   fit(df_regr)
 ```
 
-- Plot the coefficient path
+Generate the coefficient paths.
 
 ```{r}
 lasso_fit_2D2 %>% extract_fit_parsnip() %>% 
@@ -95,13 +99,12 @@ lasso_fit_2D5 %>% extract_fit_parsnip() %>%
   plot(xvar = 'lambda')
 ```
 
-## Tune w/ Resampling
-
 ### Setup
 
-- Create the custom search grid for the penalty strength and mixing fraction parameters.
-  - Shrink the bound of penalty strength for the range of parameters I am interested to tune.
-  - Use 0.1 as lower bound for mixing fraction to avoid fully Ridge. 
+**Create the custom search grid for the penalty strength and mixing fraction parameters.**
+
+- Shrink the bound of penalty strength for the range of parameters I am interested to tune.
+- Use 0.1 as lower bound for mixing fraction to avoid fully Ridge. 
 
 ```{r tuning grid}
 # set tuning parameter ranges
@@ -113,18 +116,20 @@ enet_grid <- grid_regular(
   levels = c(penalty = 80, mixture = 5))
 ```
 
+**Define the resampling scheme**
+
 - Use the 5-fold cross-validation with 3 repeats.
 - Model specification: use `glmnet` engine.
 
-```{r resample setup}
+```{r resampling}
 set.seed(1493)
-cv_folds <- vfold_cv(df_regr, v = 5, repeats = 3)
+enet_folds <- vfold_cv(df_regr, v = 5, repeats = 3)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
 
-### Execute
+**Create workflow set.**
 
-```{r message=FALSE, warning=FALSE}
+```{r workflow}
 enet_spec <-
   linear_reg(penalty = tune(), mixture = tune()) %>% 
   set_engine("glmnet", intercept = TRUE, standardize = TRUE)
@@ -137,12 +142,16 @@ enet_wset <-
       ), 
     models = list(enet = enet_spec)
   )
+```
 
+### Execute
+
+```{r message=FALSE, warning=FALSE}
 enet_tune_2D <- enet_wset %>% 
   workflow_map(
     fn = "tune_grid",
     grid = enet_grid,
-    resamples = cv_folds, 
+    resamples = enet_folds, 
     metrics = my_metrics,
     control = control_grid(
       # save_pred = TRUE,
@@ -162,9 +171,9 @@ readr::write_rds(enet_tune_2D,"./models/enet_tune_2D")
 enet_tune_2D <- readr::read_rds("./models/enet_tune_2D")
 ```
 
-### Model Comparison
+### Performance
 
-- Visualize the model performance metrics across the two models tuned. 
+**Visualize the model performance metrics across the two models tuned.** 
 
 ```{r visualize, out.width=800, fig.width=8, fig.asp=1, message=FALSE, warning=FALSE}
 names(enet_tune_2D$result) <- enet_tune_2D$wflow_id
@@ -182,7 +191,7 @@ enet_tune_2D$result %>%
         group = interaction(mixture, .metric),
         color = as.factor(mixture)),
     size = 1) +
-  facet_grid( .metric ~ wflow_id, scales = "free_y")+
+  facet_grid( .metric ~ wflow_id, scales = "free_y") +
   xlab("log-penalty") + ylab("performance") + labs(color="mixture", fill="mixture")
 ```
 
@@ -193,7 +202,7 @@ enet_tune_2D$result %>%
 
 ### Best Model
 
-- Select the best tuning parameters based on the one-standard-error rule.  
+**Select the best tuning parameters based on the one-standard-error rule.**  
 
 ```{r}
 enet_best_mae_params <- 
@@ -203,9 +212,10 @@ enet_best_mae_params <-
           .id = "wflow_id")
 enet_best_mae_params %>% select(-starts_with("."))
 ```
+
 - Comparing across the best of two models, the "all pairwise interactions" one has clear greater MAE performance. 
 
-- Finalize the workflow for the best model and retrain to save predictions. 
+**Finalize the workflow for the best model and retrain to save predictions.** 
 
 ```{r}
 enet_best_wflow_mae <- "all_pairwise_enet"
@@ -220,7 +230,7 @@ enet_best_wflow <- enet_wset %>%
 
 enet_best_2D <- enet_best_wflow %>% 
   fit_resamples(
-    cv_folds,
+    resamples = enet_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = T)
   )

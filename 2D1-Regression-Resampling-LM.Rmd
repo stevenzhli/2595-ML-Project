@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 2D1, Regression - Resampling - LM"
 author: "Zhenyu Li"
 date: '2022-04-18'
@@ -22,16 +23,14 @@ df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
 ```
 
+
 ## Linear Models
 
-- In this file, I will fit the 2 predefined linear models and 3 custom basis linear models from earlier. 
-- I will compare the model performances derived from resampling.   
+Train the 2 predefined linear models and 3 custom basis linear models selected from section 2A using resampling.  
 
-## Feature Engineering
+**Create the blueprints for data preprocessing & feature engineering.**  
 
-- Create the blueprints for data preprocessing & feature engineering.  
-
-#### Predefined linear models
+### Predefined linear models
 
 - `2D1`: All categorical and continuous inputs - linear additive features.
 
@@ -50,25 +49,23 @@ bp_2D2 <- bp_2D1 %>%
   step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":")
 ```
 
-#### Custom linear models
+### Custom linear models
 
 - Import previous models that are referenced here.
+- Get input names that need nonlinear features together.
 
 ```{r}
 mod_2Ac1 <- readr::read_rds("./models/mod_2Ac1")
 mod_2Ac3 <- readr::read_rds("./models/mod_2Ac3")
 mod_2Ac4 <- readr::read_rds("./models/mod_2Ac4")
-```
 
-- Get input names that need nonlinear features together.
-
-```{r}
 nonlin_pred <- c("xa_03","xa_05","xa_08",
                  "xb_03","xb_05","xb_08",
                  "xn_03","xn_05","xn_08",
                  "xs_01","xs_04","xs_06",
                  "xw_01","xw_02","xw_03")
 ```
+
 
 - `2D3_2Ac1`: Linear additive of the nonlinear features and the rest. 
 
@@ -99,7 +96,7 @@ bp_2D4_2Ac3 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% nco
 coef(mod_2Ac3) %>% length()
 ```
 
-- `2D5_2Ac4`: All pairwise interactions for all input variables. (`mod_2Ac4`)
+- `2D5_2Ac4`: All pairwise interactions for all input variables.  
 
 ```{r mod_2D5}
 bp_2D5_2Ac4 <- bp_2D1 %>% 
@@ -118,11 +115,11 @@ coef(mod_2Ac4) %>% length()
 
 ### Setup
 
-- Resampling Scheme
-  - Use 5 fold cross-validation with 5 repeats for resampling.
-  - Will compare RMSE, MAE and R-Squared metrics.
-  - Model specification:
-    - Use `lm` engine to fit the models.
+**Define the resampling scheme.**
+
+- Use 5 fold cross-validation with 5 repeats for resampling.
+- Will compare RMSE, MAE and R-Squared metrics.
+- Model specification: use `lm` engine to fit the models.
 
 ```{r resample setup}
 set.seed(2543)
@@ -131,7 +128,7 @@ my_metrics <- metric_set(rmse, mae, rsq)
 lm_spec <- linear_reg() %>% set_engine("lm")
 ```
 
-- Create workflow set for the linear models to fit. 
+**Create workflow set to fit.**  
 
 ```{r workflow set}
 lm_wset <- workflow_set(
@@ -147,8 +144,6 @@ lm_wset <- workflow_set(
 ```
 
 ### Execute
-
-- Operate on the workflow set to fit and resample. 
 
 ```{r message=FALSE, warning=FALSE}
 lm_cv_2D <- lm_wset %>% 
@@ -170,12 +165,13 @@ readr::write_rds(lm_cv_2D,"./models/lm_cv_2D")
 lm_cv_2D <- readr::read_rds("./models/lm_cv_2D")
 ```
 
-### Comparison
+### Performance
 
-- Visualize and compare performances across 5 linear models.
-  - Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale. 
+**Visualize and compare performances across 5 linear models.**
 
-```{r performance 1, out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
+- Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale. 
+
+```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
 lm_cv_2D %>% collect_metrics() %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
@@ -188,7 +184,7 @@ lm_cv_2D %>% collect_metrics() %>%
 
 - Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
 
-```{r performance 2, out.width=500, fig.width=5, fig.asp=0.30, warning=FALSE}
+```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
 lm_cv_2D %>% collect_metrics() %>% 
   filter(!grepl("_pairwise_", wflow_id)) %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
@@ -205,7 +201,7 @@ lm_cv_2D %>% collect_metrics() %>%
 
 ### Best Model
 
-- Retrain the best model with predictions saved.
+**Retrain the best model with predictions saved.**
 
 ```{r}
 lm_best_wflow_mae <- "nonlin_additive_lm"

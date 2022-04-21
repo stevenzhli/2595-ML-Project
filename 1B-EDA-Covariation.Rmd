@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 1B, EDA: Covariation"
 author: "Zhenyu Li"
 date: '2022-04-8'
@@ -16,16 +17,6 @@ source("./scripts/utils.R")
 theme_set(theme_linedraw())
 ```
 
-----
-
-This continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between input and output. 
-- Covariation between an input and an output could indicate the input can be used to predict the output. 
-- Visualize the relationship between input and output to help with feature engineering. 
-- Examine if interactions could affect prediction. 
-
-
-Load and transform the data as in Part1A. 
-
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
@@ -37,13 +28,21 @@ df_eda <- df %>% mutate(
 
 ----
 
+This section continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between input and output.  
+
+- Covariation between an input and an output could indicate the input can be used to predict the output. 
+- Visualize the relationship between input and output to help with feature engineering. 
+- Examine if interactions could affect prediction. 
+
+----
+
 ## Continuous Response
 
 ### Response vs Continuous Input
 
 **Examine the response with regard to every continuous input.**
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=response)) +
@@ -61,7 +60,7 @@ plot_grid(p)
 
 **Examine the log-transformed response with regard to every continuous input.**
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=log_response)) +
@@ -131,7 +130,7 @@ df_eda %>%
 
 **Log-transformed response from each continuous input, conditioned on region. **
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=log_response, color=region)) +
@@ -150,7 +149,7 @@ plot_grid(p)
 
 **Log-transformed response from each continuous input, conditioned on customer. **
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=log_response,color=customer)) +
@@ -173,7 +172,7 @@ plot_grid(p)
 
 **Check how the binary outcome is affected by the continuous inputs.**
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=binary_outcome)) +
@@ -190,7 +189,7 @@ plot_grid(p)
   
 **Examine how the response affects outcome.**
 
-```{r out.width=800, fig.width=8, fig.asp=0.40, warning=FALSE}
+```{r out.width=600, fig.width=6, fig.asp=0.40, warning=FALSE}
 df_eda %>%
   pivot_longer(c("log_response", "response")) %>%
   ggplot(aes(x=value, y=binary_outcome)) +
@@ -198,6 +197,7 @@ df_eda %>%
     geom_smooth(formula=y~x, method="glm", method.args=list(family=binomial)) +
     facet_wrap(~name, scales="free", ncol=8) + xlab("")
 ```
+
 - The `response` does have some impact on `outcome`. 
   - Lower response associated with higher event probability.
   - Consider using `response` as predictor for `outcome`. [feature-engineering]
@@ -221,9 +221,9 @@ df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
 
 ### Outcome vs ALL Inputs
 
-**Examine outcome based on continuous input, conditioned on region. **
+**Examine outcome based on continuous input, conditioned on `region`.**
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=binary_outcome, color=region)) +
@@ -232,12 +232,15 @@ p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
     facet_wrap(~name, scales="free", ncol=8) + xlab("")
 plot_grid(p)
 ```
+
 - The `region` changes how each input could predict the `outcome`. 
   - Smoothed event probability trends for inputs `xs_04`, `xs_05`, `xs_06` and `xw` inputs seem to have different direction depending on `region`. 
   - Consider interacting `region` with inputs to predict `outcome`. [feature-engineering]
 
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+**Examine outcome based on continuous input, conditioned on `customer`.**
+
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value, y=binary_outcome, color=customer)) +
@@ -253,5 +256,4 @@ plot_grid(p)
   - Consider interacting `customer` with inputs to predict `outcome`. [feature-engineering]
 
 ----
-
 

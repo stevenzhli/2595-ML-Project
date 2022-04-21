@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 2A, Regression - Baseline Models"
 author: "Zhenyu Li"
 date: '2022-04-08'
@@ -16,6 +17,7 @@ source("./scripts/utils.R")
 theme_set(theme_linedraw())
 ```
 
+
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
@@ -26,9 +28,16 @@ sel_cat_in <- setdiff(sel_cat, "outcome")
 
 ----
 
+In this section, several baseline linear models are trained using `lm`.  
+
+- Models are compared based on AIC/BIC. 
+- Important features from models are discussed. 
+
+----
+
 ## Preprocessing
 
-- For regression, the necessary preprocessing steps include:  
+- For regression, the necessary preprocessing steps include:   
   - Log-transform the continuous response  
   - Standardize continuous inputs  
 
@@ -45,24 +54,27 @@ df_preproc <- df %>%
 
 ## Model Fitting
 
+**Create linear models to fit the data.** 
+
 ### Predefined Models
 
-- Fit the following models  
-  1. Categorical variables only – linear additive  
-  2. Continuous variables only – linear additive  
-  3. All categorical and continuous variables – linear additive  
-  4. Interact `region` with continuous inputs, do not include `customer`  
-  5. Interact `customer` with continuous inputs, do not include `region`  
-  6. All pairwise interactions of continuous inputs, do not include categorical inputs  
+**Fit 6 predefined linear models.**
 
-- Slice the data with certain inputs to facilitate model building.   
+1. Categorical variables only – linear additive  
+2. Continuous variables only – linear additive  
+3. All categorical and continuous variables – linear additive  
+4. Interact `region` with continuous inputs, do not include `customer`  
+5. Interact `customer` with continuous inputs, do not include `region`  
+6. All pairwise interactions of continuous inputs, do not include categorical inputs  
+
+Slice the data with certain inputs to facilitate model building.  
 
 ```{r}
 df_cat <- df_preproc %>% select(-all_of(sel_num_in))
 df_num <- df_preproc %>% select(-all_of(sel_cat_in))
 ```
 
-- Fit models by providing specific formula.  
+Fit models by providing formula.  
 
 ```{r}
 # fit the predefined models
@@ -74,7 +86,7 @@ mod_2A5 <- lm(response ~ (customer) * (. -region), df_preproc)
 mod_2A6 <- lm(response ~ (.)^2, df_num)
 ```
 
-- Get a quick comparison using information criterion.  
+Get a quick comparison of models using information criterion.  
 
 ```{r}
 my_models <- mget(ls(pattern = "^mod_2A\\d+"))
@@ -86,15 +98,14 @@ calc_models_ic(my_models)
 
 ### Custom Basis Models
 
-- Fit 4 custom basis models
+**Fit 4 custom basis models.**
 
 - Input features that involve some non-linearity from EDA are
   - `xa, xb, xn` at index `03, 05, 08`
   - `xs` index `01, 04, 06`
   - `xw` index `01, 02, 03`
 
-- Add non-linearity using quadratic (2 degree polynomial) to these inputs, keep linear for the rest.
-  - Use linear additive relationships for all features.
+**1. Add non-linearity using 2 dof natural spline to these inputs, keep linear for the rest inputs. Linear additive only.** 
 
 ```{r model 2Ac1}
 mod_2Ac1 <- lm(
@@ -113,7 +124,7 @@ mod_2Ac1 <- lm(
 calc_models_ic(list(mod_2Ac1))
 ```
 
-- Add interaction from region and customer, keep the rest as 2Ac1.  
+**2. Add interaction from region and customer, keep the rest as 2Ac1.**
 
 ```{r model 2Ac2}
 mod_2Ac2 <- lm(
@@ -132,7 +143,7 @@ mod_2Ac2 <- lm(
 calc_models_ic(list(mod_2Ac2))
 ```
 
-- Interact `region` with the nonlinear features from 2Ac1, additive for the rest. 
+**3. Interact `region` with the nonlinear features from 2Ac1, additive for the rest.**  
 
 ```{r model 2Ac3}
 mod_2Ac3 <- lm(
@@ -151,16 +162,14 @@ mod_2Ac3 <- lm(
 calc_models_ic(list(mod_2Ac3))
 ```
 
-- Pair-wise interaction for all input variables. 
+**4. Use pair-wise interaction for all input variables.**  
 
 ```{r model 2Ac4}
 mod_2Ac4 <- lm(response ~ (.)^2, df_preproc)
 calc_models_ic(list(mod_2Ac4))
 ```
 
-### Save the Models
-
-Save models to file. 
+**Save the models to file.**  
 
 ```{r}
 my_models <- mget(ls(pattern = "^mod_2A"))
@@ -186,7 +195,7 @@ mod_2Ac4 <- readr::read_rds("models/mod_2Ac4")
 
 ### Model Comparison
 
-Print out the model metrics. 
+**Print out the model metrics.**  
 
 ```{r}
 my_models <- mget(ls(pattern = "^mod_2A"))
@@ -194,20 +203,20 @@ calc_models_ic(my_models) %>% knitr::kable()
 ```
 
 - Metrics
-  - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling. 
+  - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
 
 - Special case
-  - The all-pairwise model (`mod_2Ac4`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling in 2D). 
+  - The all-pairwise model (`mod_2Ac4`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling in 2D).  
   - For here, I will skip it too, and examine models with second lowest AIC, second lowest BIC, and one in between for both.
 
 - Best models
   - Based on the BIC, select `mod_2A3`.
-  - Based on the AIC, select `mod_2Ac3`. 
+  - Based on the AIC, select `mod_2Ac3`.  
   - Based on balance of the two, select `mod_2Ac1`
 
 ### Coefficient Plot
 
-Visualize the coefficient summaries for the top 3 models. 
+**Visualize the coefficient summaries for the top 3 models.**  
 
 ```{r out.width=500, fig.width=5, fig.asp=1}
 coefplot(mod_2A3)
@@ -216,26 +225,25 @@ coefplot(mod_2Ac3)
 ```
 
 - Each model contains some significant coefficients, but it looks like majority of them are non-significant.
-- For the linear feature additive only model (`mod_2A3`) the coefficients are quite small, within 1. 
-- For the two custom basis model with the nonlinear features coefficients are larger. 
+- For the linear feature additive only model (`mod_2A3`) the coefficients are quite small, within 1.  
+- For the two custom basis model with the nonlinear features coefficients are larger.  
 - One interesting observation is that adding nonlinear features (mod_2Ac1) seem to have caused the `region` coefficients to become more uncertain from the all linear additive model (mod_2A3).  
 
 ### Important Features
 
-- Filter each model for significant coefficients (uncertainty interval do not span 0).  
-  - Then rank by their estimated coefficients in descending order.  
+- Filter each model for significant coefficients (uncertainty interval do not span 0). Then rank by their estimated coefficients in descending order.  
   - Those with higher coefficients indicate more impact on the response since the inputs are standardized.   
 
 ```{r}
-pull_lm_coefs_signif(mod_2A3, 0.95)
-pull_lm_coefs_signif(mod_2Ac1, 0.95)
-pull_lm_coefs_signif(mod_2Ac3, 0.95)
+pull_lm_coefs_signif(mod_2A3, 0.95) %>% knitr::kable()
+pull_lm_coefs_signif(mod_2Ac1, 0.95) %>% knitr::kable()
+pull_lm_coefs_signif(mod_2Ac3, 0.95) %>% knitr::kable()
 ```
 
-- For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`. 
+- For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`.  
 - For categorical inputs, it depends on the continuous features:
-  - If we use original continuous inputs (`mod_2A3`), both the `region`, `customer` are important. 
-  - As mentioned, when nonlinear features were added (`mod_2Ac1`), the `region` coefficients become more uncertain.  
-  - Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important. 
+  - If we use the unmodified continuous inputs (`mod_2A3`), both the `region`, `customer` are important.  
+  - As mentioned, once we add nonlinear features (`mod_2Ac1`), the `region` coefficients become more uncertain.  
+  - Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important.  
 
 ----

@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 2C, Regression - Model Predictions"
 author: "Zhenyu Li"
 date: '2022-04-15'
@@ -18,6 +19,9 @@ library(bayesplot)
 source("./scripts/utils.R")
 ```
 
+In this section, I will visualize how the linear models created earlier could predict the `response` based on some selected inputs.  
+
+
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 df_preproc <- df %>% 
@@ -30,31 +34,33 @@ df_preproc <- df %>%
 my_inputs <- setdiff(names(df_preproc),"response")
 ```
 
-## Model Selection
+----
 
-- Select two models from 2A/2B for prediction.   
-  - Decided to use Bayesian models from 2B for prediction.  
+## Prediction
+
+### Model Selection
+
+**Select two Bayesian models from 2B for prediction and visualization.**   
 
 - Choose two with similar posterior σ but different features
-  - One with `region` interacting inputs with non-linear basis (2 dof natural spline) `mod_2B3_2Ac3`. 
-    - This is the best model identified using WAIC using Bayesian.
-  - One with only linear additive inputs `mod_2B1_2A3`. 
-    - This is the best model identified by BIC in MLE model fitting.  
+
+- One with `region` interacting inputs with non-linear basis (2 dof natural spline) `mod_2B3_2Ac3`. 
+  - This is the best model identified using WAIC using Bayesian.
+- One with only linear additive inputs `mod_2B1_2A3`. 
+  - This is the best model identified by BIC in MLE model fitting.  
 
 ```{r}
 mod_2B1_2A3 <- readr::read_rds("models/mod_2B1_2A3")
 mod_2B3_2Ac3 <- readr::read_rds("models/mod_2B3_2Ac3")
 ```
 
-----
-
-## Prediction
-
 ### Input Selection
 
-- Visualize the significant regression coefficients for both models.  
+**Select inputs to visualize, based on model coefficient significance.**  
 
-```{r coefplot mod_2B3_2Ac3}
+**First model, coefficient plot**  
+
+```{r mod_2B3_2Ac3}
 mod_2B3_2Ac3 %>% as_tibble() %>% 
   select(all_of(
     mod_2B3_2Ac3 %>% pull_bayes_coefs(signif=T) %>% select(coef) %>% unlist(use.names=F)
@@ -63,11 +69,14 @@ mod_2B3_2Ac3 %>% as_tibble() %>%
   mcmc_intervals() +
   geom_vline(xintercept = 0,linetype="dashed")
 ```
+
 - Among these significant coefficients:   
   - The linear predictors have much less magnitudes and uncertainties.  
   - Interaction between `region` to non-linear predictors have greater uncertainty, but also magnitudes.  
 
-```{r coefplot mod_2B1_2A3}
+**Second model, coefficient plot**  
+
+```{r mod_2B1_2A3}
 mod_2B1_2A3 %>% as_tibble() %>% 
   select(all_of(
     mod_2B1_2A3 %>% pull_bayes_coefs(signif=T) %>% select(coef) %>% unlist(use.names=F)
@@ -77,27 +86,32 @@ mod_2B1_2A3 %>% as_tibble() %>%
   geom_vline(xintercept = 0,linetype="dashed")
 ```
 
-- All of these linear predictor coefficients are quite small compared to the nonlinear predictors from `mod_2B3_2Ac3`. 
+- All of these linear predictor coefficients are quite small compared to the nonlinear predictors from first model `mod_2B3_2Ac3`. 
 
-- Choose predictors to use based on both 
-  - The magnitude of the estimated coefficient, and 
-  - If two coefficients show significant difference when compared on the coefficient plot. 
-  
-- Selected
+**Choose predictors to use based on both models. **  
+
+- Selection criterion
+  1. Since inputs are normalized, the greater magnitude of the estimated coefficient indicates more impact from this input to the `response`.
+  2. If two coefficients show significant difference on the coefplot they worth looking at. 
+  3. Examine both continuous and categorical inputs. 
+
+- Selected 4 sets of inputs for visualization
   1. xb_07, xb_04 (linear, linear)
   2. xb_07, customer (linear, category)
   3. xa_08, xb_07, region (nonlinear, linear, category)
   4. xw_01, xb_05, region (nonlinear, nonlinear, category)
 
-- Note: since all continuous inputs are standardized to train the models, the prediction test grid is just created at the same standardized scale using the preprocessed dataset. The predictors thus have the standardized scales, not the actual scale from the original data set. But the trends should remain. 
+- Note: since all continuous inputs are normalized to allow better comparisons, the prediction test grid is just created at the same scale using the preprocessed dataset. The predictors thus have the normalized scales, not the actual scale from the original data set. But the trends should remain. 
 
 ----
 
 ## Predictions
 
-### xb_07, xb_04
+### Set 1: xb_07, xb_04
 
-```{r mod_2B3_2Ac3, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
+**First model**  
+
+```{r mod_2B3.1, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07", "xb_04"))
 
 make_post_pred(mod_2B3_2Ac3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
@@ -113,7 +127,9 @@ make_post_pred(mod_2B3_2Ac3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
 - The log-response decreases with the linear predictor `xb_04` (horizontal facts, shift trends down).
 - There is higher uncertainty on the model behavior (mean trend) when inputs are at extreme values. 
 
-```{r mod_2B1_2A3, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
+**Second model**  
+
+```{r mod_2B1.1, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07", "xb_04"))
 
 make_post_pred(mod_2B1_2A3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
@@ -125,10 +141,13 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
   scale_fill_viridis_b() + ylab("log response")
 ```
 
+- Same trends as with first model.  
 
-### xb_07, customer
+### Set 2: xb_07, customer
 
-```{r mod_2B3_2Ac3, out.width=800, fig.width=8, fig.asp=0.20, warning=FALSE}
+**First model**  
+
+```{r mod_2B3.2, out.width=800, fig.width=8, fig.asp=0.20, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07"), "customer")
 
 make_post_pred(mod_2B3_2Ac3, viz_grid) %>% 
@@ -145,7 +164,9 @@ make_post_pred(mod_2B3_2Ac3, viz_grid) %>%
   - Customers `A`,`K` tend to have higher response. 
   - Customers `M`,`Q` tend to have lower response. 
 
-```{r mod_2B1_2A3, out.width=800, fig.width=8, fig.asp=0.20, warning=FALSE}
+**Second model**  
+
+```{r mod_2B1.2, out.width=800, fig.width=8, fig.asp=0.20, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07"), "customer")
 
 make_post_pred(mod_2B1_2A3, viz_grid) %>% 
@@ -158,10 +179,13 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>%
   ylab("log response") + theme(legend.position="none") 
 ```
 
+- Same trends as with first model.  
 
-### xa_08, xb_07, region
+### Set 3: xa_08, xb_07, region
 
-```{r mod_2B3_2Ac3, out.width=800, fig.width=8, fig.asp=0.6, warning=FALSE}
+**First model**  
+
+```{r mod_2B3.3, out.width=800, fig.width=8, fig.asp=0.6, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xa_08", "xb_07"), "region")
 
 make_post_pred(mod_2B3_2Ac3, viz_grid) %>% 
@@ -183,7 +207,9 @@ make_post_pred(mod_2B3_2Ac3, viz_grid) %>%
 - Increasing the linear predictor `xb_07` slightly increase the response (horizontal facets).
   - Though the magnitude of the effect is overshadowed by the nonlinear predictor (the coefficients are small). 
 
-```{r mod_2B1_2A3, out.width=800, fig.width=8, fig.asp=0.6, warning=FALSE}
+**Second model**  
+
+```{r mod_2B1.3, out.width=800, fig.width=8, fig.asp=0.6, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xa_08", "xb_07"), "region")
 
 make_post_pred(mod_2B1_2A3, viz_grid) %>% 
@@ -196,13 +222,15 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>%
   scale_fill_viridis_b() + ylab("log response")
 ```
 
-- Compared to the model with `region` interacting with nonlinear features, this linear additive only model is less flexible and unable to adapt to the trend based on `region` because there is no interaction. 
+- Compared to the first model with `region` interacting with nonlinear features, this linear additive only model is less flexible and unable to adapt to the trend based on `region` because there is no interaction. 
   - All we get is that region shifts the trend up and down. 
 - This resulted higher prediction uncertainty but relatively smaller model uncertainty as compared to the other model.  
 
-### xb_05, xw_01, region 
+### Set 4: xb_05, xw_01, region 
 
-```{r mod_2B3_2Ac3, out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
+**First model**
+
+```{r mod_2B3.4, out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_05", "xw_01"), "region")
 
 make_post_pred(mod_2B3_2Ac3, viz_grid) %>% 
@@ -220,7 +248,9 @@ make_post_pred(mod_2B3_2Ac3, viz_grid) %>%
   - Slightly decrease the log-response at region `YY`
 - The nonlinear predictor `xw_01` increases response. 
 
-```{r mod_2B1_2A3, out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
+**Second model**
+
+```{r mod_2B1.4, out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_05", "xw_01"), "region")
 
 make_post_pred(mod_2B1_2A3, viz_grid) %>% 
@@ -233,7 +263,7 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>%
   scale_fill_viridis_b() + ylab("log response")
 ```
 
-- We see similar effect as with the prior comparisons, that the `3A` model is unable to fit more closely to observations in the specific category, since we did not involve any interaction in this model. 
+- We see similar effect as with the prior comparisons, that the second model is unable to fit more closely to observations in the specific category, since we did not involve any interaction in this model. 
 
 ----
 

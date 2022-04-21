@@ -1,4 +1,5 @@
 ---
+title: "INFSCI 2595 Final Project"
 subtitle: "Part 1A, EDA: Distribution"
 author: "Zhenyu Li"
 date: '2022-03-29'
@@ -17,32 +18,32 @@ theme_set(theme_linedraw())
 
 ----
 
-In section 1A we will explore the data for basic properties and distribution of the variables. 
+In section 1A I will explore the data for basic properties and distribution of the variables.  
+
 - Check data summary, missing values, range, unique values, etc for each variable. 
 - Examine distribution of individual variables. 
 - Check correlation between continuous inputs. 
 
-**Read in the data: **
+**Read in the data:**
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 ```
 
-
-Examine the dataset by `glimpse`.
+**Examine the dataset by `glimpse`.**
 
 ```{r}
 df %>% glimpse()
 ```
 
-Select numeric and non-numeric fields into respective variables for easy reference later on. 
+**Select numeric and non-numeric fields into respective variables for easy reference later on.**  
 
 ```{r}
 sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
 sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
 ```
 
-Perform required data transformations for the `response` and `outcome` fields. 
+**Perform required data transformations for the `response` and `outcome` fields.**  
 
 ```{r}
 df_eda <- df %>% mutate(
@@ -56,7 +57,7 @@ df_eda <- df %>% mutate(
 
 ### Data Summary
 
-**Get a summary of the categorical variables `region` and `customer`, as well as the binary response `outcome`. Check missing values, unique values. **.
+**Get a summary of the categorical variables `region` and `customer`, as well as the binary response `outcome`. Check missing values, unique values. **
 
 ```{r}
 summarize_cate_var <- function(df) {
@@ -89,8 +90,9 @@ df_eda %>% select(sel_cat) %>% pivot_longer(everything(), names_to ="var", value
 
 **Use barchart to visualize the distribution of categorical input and binary response variables.**
 
-```{r out.width=400, fig.width=4, fig.asp=0.45, warning=FALSE}
-df_eda %>% select(sel_cat) %>% pivot_longer(everything()) %>%
+```{r out.width=600, fig.width=6, fig.asp=0.5, warning=FALSE}
+df_eda %>% select(sel_cat) %>% 
+  pivot_longer(everything()) %>%
   ggplot() +
   geom_bar(aes(x=value, fill=value)) +
   facet_grid(~name, scales="free_x", space="free_x") +
@@ -155,12 +157,12 @@ df_eda %>% select(all_of(cols_tmp)) %>% lapply(unique) %>% lapply(sort)
 
 **Examine the data distribution of the input variables. **
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
   pivot_longer(starts_with("x")) %>%
   ggplot(aes(x=value)) +
-    # geom_density(aes(color=region), bins=50) +
-    geom_histogram(aes(fill=region), bins=50) +
+    geom_density(aes(color=region), bins=50) +
+    # geom_histogram(bins=50) +
     facet_wrap(~name, scales="free", ncol=8) +
     ylab("") + xlab("")
 plot_grid(p)
@@ -168,7 +170,7 @@ plot_grid(p)
 
 **Check if inputs are normally distributed using q-q plot**
 
-```{r out.width=1000, fig.width=10, fig.asp=0.65, warning=FALSE}
+```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>% select(starts_with("x")) %>%
   pivot_longer(everything()) %>%
   ggplot() +
@@ -181,7 +183,6 @@ plot_grid(p)
 - Most features look normally distributed, except:
   - The `xw` that corresponds to word count data, which is lower-bounded by 0. Two of them `xw_02`, `xw_03` look quite skewed.
   - The `xs_05` looks like it also has 0 as lower bound.
-- The four numeric categorical inputs are manifested by the separated bins found on `xb_02`,`xb_03`,`xn_02`,`xn_03`.
 - Inputs are not uniform across the `region` category. 
 
 **Examine the distribution of the continuous response.**
@@ -259,6 +260,8 @@ df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
   - The sequential blue diagonal squares indicate the positive correlations between features with same feature index among the lexicon derived features `xa`,`xb` and `xn`.
   - The many 4-cell blue-red diagonals squares indicate correlation between feature index `02`,`03` and between index `05`,`06` features for each set of inputs. 
   - These are more obvious when reordered. 
+
+**Reorder the correlation plot to view the correlated terms. **
 
 ```{r out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
 df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
