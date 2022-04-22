@@ -93,7 +93,7 @@ my_models <- mget(ls(pattern = "^mod_2A\\d+"))
 calc_models_ic(my_models)
 ```
 
-- `mod_2A3`: Additive relationship of all continuous inputs got best BIC.  
+- `mod_2A3`: Linear additive relationship of all continuous and categorical inputs got best BIC.  
 - `mod_2A4`: Adding interaction from `region` seem to improve AIC at the cost of BIC.   
 
 ### Custom Basis Models
@@ -124,11 +124,11 @@ mod_2Ac1 <- lm(
 calc_models_ic(list(mod_2Ac1))
 ```
 
-**2. Add interaction from region and customer, keep the rest as 2Ac1.**
+**2. Remove additive from categorical inputs, keep the rest as 2Ac1.**
 
 ```{r model 2Ac2}
 mod_2Ac2 <- lm(
-    response ~ region * customer + . - region - customer
+    response ~ . - region - customer
     + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2)
     + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
     + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
@@ -206,8 +206,8 @@ calc_models_ic(my_models) %>% knitr::kable()
   - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
 
 - Special case
-  - The all-pairwise model (`mod_2Ac4`) resulted negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling in 2D).  
-  - For here, I will skip it too, and examine models with second lowest AIC, second lowest BIC, and one in between for both.
+  - The all-pairwise model (`mod_2Ac4`) resulted large negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling/regularization in part 2D.  
+  - Thus I will skip it here too, and examine only models with second lowest AIC, second lowest BIC, and one in between for both metrics.
 
 - Best models
   - Based on the BIC, select `mod_2A3`.
@@ -231,19 +231,16 @@ coefplot(mod_2Ac3)
 
 ### Important Features
 
-- Filter each model for significant coefficients (uncertainty interval do not span 0). Then rank by their estimated coefficients in descending order.  
-  - Those with higher coefficients indicate more impact on the response since the inputs are standardized.   
+- Extract significant coefficients and arrange by overall score.  
 
 ```{r}
-pull_lm_coefs_signif(mod_2A3, 0.95) %>% knitr::kable()
-pull_lm_coefs_signif(mod_2Ac1, 0.95) %>% knitr::kable()
-pull_lm_coefs_signif(mod_2Ac3, 0.95) %>% knitr::kable()
+mod_2A3 %>% pull_lm_coefs_signif() %>% knitr::kable()
+mod_2Ac1 %>% pull_lm_coefs_signif() %>% knitr::kable()
+mod_2Ac3 %>% pull_lm_coefs_signif() %>% knitr::kable()
 ```
 
 - For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`.  
-- For categorical inputs, it depends on the continuous features:
-  - If we use the unmodified continuous inputs (`mod_2A3`), both the `region`, `customer` are important.  
-  - As mentioned, once we add nonlinear features (`mod_2Ac1`), the `region` coefficients become more uncertain.  
-  - Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important.  
+- For categorical inputs, the `region` appears important, and some levels of `customer` too.
+- Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important.  
 
 ----

@@ -30,26 +30,32 @@ Train the 2 predefined linear models and 3 custom basis linear models selected f
 
 **Create the blueprints for data preprocessing & feature engineering.**  
 
-### Predefined linear models
-
-- `2D1`: All categorical and continuous inputs - linear additive features.
-
-```{r mod_2D1}
-bp_2D1 <- recipe(response ~ ., data=df_regr) %>% 
+```{r preprocess}
+bp_prep <- recipe(response ~ ., data=df_regr) %>% 
   step_log(all_outcomes()) %>% 
   step_center(all_numeric_predictors()) %>% 
   step_scale(all_numeric_predictors())
   # prep(training=df_regr, retain=T) %>% bake(new_data=NULL)
 ```
 
+### Predefined models
+
+- `2D1`: All categorical and continuous inputs - linear additive features.
+
+```{r mod_2D1}
+bp_2D1 <- bp_prep %>% 
+  step_dummy(all_nominal_predictors())
+```
+
 - `2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   
 ```{r mod_2D2}
-bp_2D2 <- bp_2D1 %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":")
+bp_2D2 <- bp_prep %>% 
+  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
+  step_dummy(all_nominal_predictors())
 ```
 
-### Custom linear models
+### Custom models
 
 - Import previous models that are referenced here.
 - Get input names that need nonlinear features together.
@@ -70,7 +76,7 @@ nonlin_pred <- c("xa_03","xa_05","xa_08",
 - `2D3_2Ac1`: Linear additive of the nonlinear features and the rest. 
 
 ```{r mod_2D3}
-bp_2D3_2Ac1 <- bp_2D1 %>% 
+bp_2D3_2Ac1 <- bp_prep %>% 
   step_ns(all_of(nonlin_pred), deg_free = 2) %>% 
   step_dummy(all_nominal_predictors())
 
@@ -82,7 +88,7 @@ coef(mod_2Ac1) %>% length()
 - `2D4_2Ac3`: Interact `region` with only the nonlinear features, additive for the rest.
 
 ```{r mod_2D4}
-bp_2D4_2Ac3 <- bp_2D1 %>% 
+bp_2D4_2Ac3 <- bp_prep %>% 
   step_ns(all_of(nonlin_pred), deg_free = 2) %>% 
   step_dummy(region, one_hot = T) %>% 
   step_dummy(customer, one_hot = F) %>% 
@@ -99,7 +105,7 @@ coef(mod_2Ac3) %>% length()
 - `2D5_2Ac4`: All pairwise interactions for all input variables.  
 
 ```{r mod_2D5}
-bp_2D5_2Ac4 <- bp_2D1 %>% 
+bp_2D5_2Ac4 <- bp_prep %>% 
   step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>% 
   step_dummy(all_nominal_predictors()) %>% 
   step_interact( ~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>% 
@@ -111,9 +117,22 @@ bp_2D5_2Ac4 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% nco
 coef(mod_2Ac4) %>% length()
 ```
 
+----
+
 ## Resampling
 
 ### Setup
+
+**Allow parallel processing.**  
+
+```{r message=FALSE, warning=FALSE}
+if(parallel::detectCores(logical=FALSE) > 3){
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+```
 
 **Define the resampling scheme.**
 
@@ -146,23 +165,27 @@ lm_wset <- workflow_set(
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-lm_cv_2D <- lm_wset %>% 
+tune_2D_lm <- lm_wset %>% 
   workflow_map(
     fn = "fit_resamples",
     resamples = cv_folds, 
     metrics = my_metrics,
-    control = control_resamples(save_pred = F)
+    control = control_resamples(save_pred = F),
+    verbose = T
   )
 ```
 
 ```{r save result}
-readr::write_rds(lm_cv_2D,"./models/lm_cv_2D")
+readr::write_rds(tune_2D_lm,"./models/tune_2D_lm")
 ```
+
+
+----
 
 ## Conclusions
 
 ```{r}
-lm_cv_2D <- readr::read_rds("./models/lm_cv_2D")
+tune_2D_lm <- readr::read_rds("./models/tune_2D_lm")
 ```
 
 ### Performance
@@ -172,7 +195,7 @@ lm_cv_2D <- readr::read_rds("./models/lm_cv_2D")
 - Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale. 
 
 ```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-lm_cv_2D %>% collect_metrics() %>% 
+tune_2D_lm %>% collect_metrics() %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
@@ -185,7 +208,7 @@ lm_cv_2D %>% collect_metrics() %>%
 - Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
 
 ```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-lm_cv_2D %>% collect_metrics() %>% 
+tune_2D_lm %>% collect_metrics() %>% 
   filter(!grepl("_pairwise_", wflow_id)) %>% 
   ggplot(aes(x=wflow_id, color=wflow_id)) + 
   geom_linerange(aes(ymin=mean-std_err,ymax=mean+std_err)) +
@@ -201,24 +224,27 @@ lm_cv_2D %>% collect_metrics() %>%
 
 ### Best Model
 
-**Retrain the best model with predictions saved.**
+**Retrain the best model with resampling, and save predictions.**
 
 ```{r}
 lm_best_wflow_mae <- "nonlin_additive_lm"
 
-lm_best_2D <- lm_wset %>% 
-  extract_workflow(lm_best_wflow_mae) %>% 
+mod_2D_lm_best_wflow <- lm_wset %>% 
+  extract_workflow(lm_best_wflow_mae)
+
+mod_2D_lm_best_resample <- 
+  mod_2D_lm_best_wflow %>% 
   fit_resamples(
     cv_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = T)
   )
 
-lm_best_2D %>% collect_metrics() %>% select(-.config, -.estimator)
+mod_2D_lm_best_resample %>% collect_metrics() %>% select(-.config, -.estimator)
 ```
 
 ```{r}
-save_models(list(lm_best_2D = lm_best_2D))
+save_models(mget(ls(pattern = "^mod_2D_lm")))
 ```
 
 ----

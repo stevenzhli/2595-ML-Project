@@ -1,6 +1,6 @@
 ---
 title: "INFSCI 2595 Final Project"
-subtitle: "Part 2B, Regression - Bayesian Models"
+subtitle: "Part 2B, Regression - Bayesian Analysis"
 author: "Zhenyu Li"
 date: '2022-04-12'
 output: html_document
@@ -66,7 +66,9 @@ mod_2Ac1 <- readr::read_rds("models/mod_2Ac1")
 mod_2Ac3 <- readr::read_rds("models/mod_2Ac3")
 ```
 
-**1. Based on model `mod_2A3` (linear additive of all inputs).**
+
+
+**1. Based on model `mod_2A3`, linear additive of all inputs.**
 
 ```{r model 2B1_2A3}
 mod_2B1_2A3 <- stan_lm(
@@ -78,7 +80,7 @@ mod_2B1_2A3 <- stan_lm(
 ```
 
 
-**2. Based on model `mod_2Ac3`**
+**2. Based on model `mod_2Ac1`, where non-linearity is added to some inputs.**
 
 ```{r model 2B2_2Ac1}
 mod_2B2_2Ac1 <- stan_lm(
@@ -90,7 +92,7 @@ mod_2B2_2Ac1 <- stan_lm(
 ```
 
 
-**3. Based on model `mod_2Ac1`.** 
+**3. Based on model `mod_2Ac3`, where region interacts with the nonlinear features.** 
 
 ```{r model 2B3_2Ac3}
 mod_2B3_2Ac3 <- stan_lm(
@@ -159,8 +161,16 @@ bayes_R2(mod_2B3_2Ac3) %>% quantile(c(0.05, 0.5, 0.95))
 
 ```{r Uncertainty, out.width=400, fig.width=4, fig.asp=2}
 plot(mod_2B3_2Ac3, pars = names(mod_2B3_2Ac3$coefficients)) +
-  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 0.5)
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 0.5) +
+  geom_point(
+    data = as_tibble(coef(mod_2Ac3), rownames="coef"), aes(x = value, y = coef),
+    shape = 5,
+    size = 3,
+    color = "purple"
+  )
 ```
+
+- The MLE estimated coefficients are plotted using purple diamonds. We see the priors used slightly constrained the coefficients.  
 
 **Check the correlation of the posterior coefficients.**  
 
@@ -174,7 +184,7 @@ mod_2B3_2Ac3 %>% as_tibble() %>%
 
 #### Model Uncertainty
 
-**Tasks  **
+**Tasks**
 
 - Study the posterior uncertainty in the noise (residual error), 𝜎.
 - How does the `lm()` maximum likelihood estimate (MLE) on 𝜎 relate to the posterior uncertainty on 𝜎 ?
@@ -193,6 +203,7 @@ my_models %>% pull_bayes_posterior_sigma() %>%
 
 
 - Model `mod_2B3_2Ac3` has the lowest posterior σ mode (blue dashed line). 
+  - This is as expected as these are estimated from the training set and the model is most complex.  
   - The amount of uncertainty is similar for all three models, spanning the range of about 0.04. 
   - Thus the posterior σ is fairly precise as none spans a large range. 
   

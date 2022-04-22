@@ -34,17 +34,18 @@ Use Elastic Net to provide regularization to the two complex models that resulte
 - The preprocessing steps
 
 ```{r}
-bp_2D1 <- recipe(response ~ ., data=df_regr) %>% 
+bp_prep <- recipe(response ~ ., data=df_regr) %>% 
   step_log(all_outcomes()) %>% 
   step_center(all_numeric_predictors()) %>% 
   step_scale(all_numeric_predictors())
+  # prep(training=df_regr, retain=T) %>% bake(new_data=NULL)
 ```
 
 - `mod_2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   - Must manually create the dummy variables for `glmnet` to work properly.
   
 ```{r mod_2D2}
-bp_2D2 <- bp_2D1 %>% 
+bp_2D2 <- bp_prep %>% 
   step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
   step_dummy( all_nominal_predictors() )
 ```
@@ -52,13 +53,15 @@ bp_2D2 <- bp_2D1 %>%
 - `mod_2D5_2Ac4`: All pairwise interactions for all input variables. (`mod_2Ac4`)
 
 ```{r mod_2D5}
-bp_2D5_2Ac4 <- bp_2D1 %>% 
+bp_2D5_2Ac4 <- bp_prep %>% 
   step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>% 
   step_dummy(all_nominal_predictors()) %>% 
   step_interact( ~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>% 
   step_interact( ~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>% 
   step_interact( ~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
 ```
+
+----
 
 ## Tuning
 
@@ -101,9 +104,20 @@ lasso_fit_2D5 %>% extract_fit_parsnip() %>%
 
 ### Setup
 
+**Allow parallel processing.**  
+
+```{r message=FALSE, warning=FALSE}
+if(parallel::detectCores(logical=FALSE) > 3){
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+```
+
 **Create the custom search grid for the penalty strength and mixing fraction parameters.**
 
-- Shrink the bound of penalty strength for the range of parameters I am interested to tune.
+- Use the bound of penalty strength for the range of parameters I am interested to tune.
 - Use 0.1 as lower bound for mixing fraction to avoid fully Ridge. 
 
 ```{r tuning grid}
@@ -118,12 +132,12 @@ enet_grid <- grid_regular(
 
 **Define the resampling scheme**
 
-- Use the 5-fold cross-validation with 3 repeats.
+- Use the 5-fold cross-validation with 5 repeats.
 - Model specification: use `glmnet` engine.
 
 ```{r resampling}
 set.seed(1493)
-enet_folds <- vfold_cv(df_regr, v = 5, repeats = 3)
+enet_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
 
@@ -147,7 +161,7 @@ enet_wset <-
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-enet_tune_2D <- enet_wset %>% 
+tune_2D_enet <- enet_wset %>% 
   workflow_map(
     fn = "tune_grid",
     grid = enet_grid,
@@ -157,18 +171,21 @@ enet_tune_2D <- enet_wset %>%
       # save_pred = TRUE,
       parallel_over = "everything",
       save_workflow = TRUE
-    )
+    ),
+    verbose = T
   )
 ```
 
 ```{r save result}
-readr::write_rds(enet_tune_2D,"./models/enet_tune_2D")
+readr::write_rds(tune_2D_enet,"./models/tune_2D_enet")
 ```
+
+----
 
 ## Conclusions
 
 ```{r}
-enet_tune_2D <- readr::read_rds("./models/enet_tune_2D")
+tune_2D_enet <- readr::read_rds("./models/tune_2D_enet")
 ```
 
 ### Performance
@@ -176,9 +193,9 @@ enet_tune_2D <- readr::read_rds("./models/enet_tune_2D")
 **Visualize the model performance metrics across the two models tuned.** 
 
 ```{r visualize, out.width=800, fig.width=8, fig.asp=1, message=FALSE, warning=FALSE}
-names(enet_tune_2D$result) <- enet_tune_2D$wflow_id
+names(tune_2D_enet$result) <- tune_2D_enet$wflow_id
 
-enet_tune_2D$result %>% 
+tune_2D_enet$result %>% 
   map_dfr(collect_metrics, .id="wflow_id") %>% 
   ggplot(aes(x = log(penalty))) +
   geom_ribbon(
@@ -192,13 +209,13 @@ enet_tune_2D$result %>%
         color = as.factor(mixture)),
     size = 1) +
   facet_grid( .metric ~ wflow_id, scales = "free_y") +
-  xlab("log-penalty") + ylab("performance") + labs(color="mixture", fill="mixture")
+  xlab("log-penalty") + ylab("performance") + labs(color="mixture", fill="mixture") +
+  scale_color_viridis_d() + scale_fill_viridis_d()
 ```
 
-- From the visualization:
-  - Elastic Net clearly prefers Ridge over Lasso. This is as expected as our inputs have lots of correlations which can make Lasso struggle.  
-  - The model performances from "all pairwise interactions" (right grids) are clearly better compared to the "all continuous pairwise interactions" (left grids).  
-  - Judging from MAE (first grid row) the best log-penalty is at about -3.  
+- Elastic Net clearly prefers Ridge over Lasso. This is as expected as our inputs have lots of correlations which can make Lasso struggle.  
+- The model performances from "all pairwise interactions" (right grids) have better performances compared to the "all continuous pairwise interactions" (left grids).  
+- Judging from MAE (first grid row) the best log-penalty is at about -3.  
 
 ### Best Model
 
@@ -206,7 +223,7 @@ enet_tune_2D$result %>%
 
 ```{r}
 enet_best_mae_params <- 
-  enet_tune_2D$result %>% 
+  tune_2D_enet$result %>% 
   map_dfr(select_by_one_std_err, 
             desc(penalty), desc(mixture), metric = 'mae',
           .id = "wflow_id")
@@ -215,12 +232,13 @@ enet_best_mae_params %>% select(-starts_with("."))
 
 - Comparing across the best of two models, the "all pairwise interactions" one has clear greater MAE performance. 
 
-**Finalize the workflow for the best model and retrain to save predictions.** 
+**Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
 enet_best_wflow_mae <- "all_pairwise_enet"
 
-enet_best_wflow <- enet_wset %>% 
+mod_2D_enet_best_wflow <- 
+  enet_wset %>% 
   extract_workflow(enet_best_wflow_mae) %>% 
   finalize_workflow(
     parameters = enet_best_mae_params %>% 
@@ -228,19 +246,20 @@ enet_best_wflow <- enet_wset %>%
       select(all_of(names(enet_grid)))
   )
 
-enet_best_2D <- enet_best_wflow %>% 
+mod_2D_enet_best_resample <- 
+  mod_2D_enet_best_wflow %>% 
   fit_resamples(
     resamples = enet_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = T)
   )
 
-enet_best_2D %>% collect_metrics() %>% select(-.config, -.estimator)
+mod_2D_enet_best_resample %>% collect_metrics() %>% select(-.config, -.estimator)
 ```
 
 
 ```{r}
-save_models(list(enet_best_2D = enet_best_2D))
+save_models(mget(ls(pattern = "^mod_2D_enet")))
 ```
 
 ----

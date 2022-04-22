@@ -25,14 +25,13 @@ df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
 
 ## Advanced Models
 
-Train the following advanced models.
+Train the following advanced models for the regression.
 
 - Neural network
 - Random forest
 - Gradient boosted tree
 - Multivariate Additive Regression Splines
 - Support Vector Machine
-- K-Nearest Neighborhood
 
 ### Models
 
@@ -110,13 +109,26 @@ adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>%
   mutate(wflow_id = gsub("(recipe_)","",wflow_id))
 ```
 
-## Tuning
+## Training
 
 ### Setup
 
+**Allow parallel processing.**  
+
+```{r message=FALSE, warning=FALSE}
+if(parallel::detectCores(logical=FALSE) > 3){
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+```
+
+**Resampling setup.**
+
 ```{r resampling}
 set.seed(2356)
-adv_folds <- vfold_cv(df_regr, v = 5, repeats = 3) #DEBUG
+adv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
 
@@ -125,7 +137,7 @@ my_metrics <- metric_set(rmse, mae, rsq)
 **Perform model tuning with default grid and 10 levels at each tuning parameter.**  
 
 ```{r message=FALSE, warning=FALSE}
-adv_tune_2D <- adv_wset_all %>% 
+tune_2D_adv <- adv_wset_all %>% 
   workflow_map(
     fn = "tune_grid",
     resamples = adv_folds,
@@ -141,22 +153,30 @@ adv_tune_2D <- adv_wset_all %>%
 ```
 
 ```{r save result}
-readr::write_rds(adv_tune_2D,"./models/adv_tune_2D")
+readr::write_rds(tune_2D_adv,"./models/tune_2D_adv")
 ```
+
+----
 
 ## Conclusions
 
 ```{r}
-adv_tune_2D <- readr::read_rds("./models/adv_tune_2D")
+tune_2D_adv <- readr::read_rds("./models/tune_2D_adv")
 ```
 
 ### Performance
 
-**Visualize the model performance metrics across the models tuned.**  
+**Print out the value of model metrics for quick comparison. **  
 
-```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.6, message=FALSE, warning=FALSE}
-names(adv_tune_2D$result) <- adv_tune_2D$wflow_id
-adv_tune_2D %>% 
+```{r}
+tune_2D_adv %>% rank_results(rank_metric = "mae", select_best = T)
+```
+
+**Visualize the model performance metrics across the models tuned with the best tuning parameters for each.**  
+
+```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+names(tune_2D_adv$result) <- tune_2D_adv$wflow_id
+tune_2D_adv %>% 
   autoplot( 
     rank_metric = "mae",
     metric = c("mae","rmse","rsq"),
@@ -167,39 +187,35 @@ adv_tune_2D %>%
   theme(legend.position = "none")
 ```
 
-- Judging from the visualization
-  - SVM method has best performance for all three metrics. 
+- Judging from the visualization, XGB method has best performance for all three metrics. 
   
-**Print out the value of model metrics for quick comparison. **  
-
-```{r}
-adv_tune_2D %>% rank_results(rank_metric = "mae", select_best = T)
-```
 
 ### Best Model
 
-**Select the best tuning parameters based on the one-standard-error rule.**  
+**Extract the best tuning parameters based on the one-standard-error rule from the best model.**  
 
 ```{r}
+adv_best_wf <- "XGB"
+
 adv_best_mae_params <- 
-  adv_tune_2D$result$SVM %>% select_by_one_std_err(rbf_sigma, metric = "mae")
+  tune_2D_adv$result[[adv_best_wf]] %>% 
+  select_by_one_std_err(tree_depth, learn_rate, trees, mtry, sample_size, metric = "mae")
 adv_best_mae_params %>% select(-starts_with("."))
 ```
 
-**Finalize the workflow for the best model and retrain to save predictions.** 
+**Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
-adv_best_wflow_mae <- "SVM"
-
-adv_best_wflow <- adv_wset_all %>% 
-  extract_workflow(adv_best_wflow_mae) %>% 
+mod_2D_adv_best_wflow <-
+  adv_wset_all %>% 
+  extract_workflow(adv_best_wf) %>% 
   finalize_workflow(
     parameters = adv_best_mae_params
   )
 
-adv_best_2D <- adv_best_wflow %>% 
+mod_2D_adv_best_resample <-
+  mod_2D_adv_best_wflow %>% 
   fit_resamples(
-    adv_folds,
     resamples = adv_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = T)
@@ -208,7 +224,7 @@ adv_best_2D <- adv_best_wflow %>%
 
 
 ```{r}
-save_models(list(adv_best_2D = adv_best_2D))
+save_models(mget(ls(pattern = "^mod_2D_adv")))
 ```
 
 ----
