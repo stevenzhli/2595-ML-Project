@@ -31,9 +31,8 @@ Train the 2 predefined general linear models and 3 custom basis general linear m
 **Create the blueprints for data preprocessing & feature engineering.**  
 
 ```{r preprocess}
-bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>% 
-  step_center(all_numeric_predictors()) %>% 
-  step_scale(all_numeric_predictors())
+bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>%
+  step_normalize(all_numeric_predictors())
   #prep(training=df_clas, retain=T) %>% bake(new_data=NULL)
 ```
 
@@ -42,15 +41,15 @@ bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>%
 - `3D1`: All categorical and continuous inputs - linear additive features.
 
 ```{r mod_3D1}
-bp_3D1 <- bp_prep_cl %>% 
+bp_3D1 <- bp_prep_cl %>%
   step_dummy(all_nominal_predictors())
 ```
 
 - `3D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   
 ```{r mod_3D2}
-bp_3D2 <- bp_prep_cl %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
+bp_3D2 <- bp_prep_cl %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>%
   step_dummy(all_nominal_predictors())
 ```
 
@@ -67,7 +66,7 @@ mod_3Ac3 <- readr::read_rds("./models/mod_3Ac3")
 # xs_03 + xs_04 + xs_05 + xs_06
 ```
 
-- `3D3_3A2`: linear additive of continuous inputs only. 
+- `3D3_3A2`: linear additive of continuous inputs only.  
 
 ```{r mod_3D3_3A2}
 bp_3D3_3A2 <- bp_prep_cl %>%
@@ -78,17 +77,17 @@ bp_3D3_3A2 %>% prep(training=df_clas, retain=T) %>% bake(new_data=NULL) %>% ncol
 coef(mod_3A2) %>% length()
 ```
 
-- `3D4_3Ac2`: interaction of selected continuous terms. 
+- `3D4_3Ac2`: interaction of selected continuous terms.  
 
 mod_3Ac2 <- glm(
-  outcome ~ . + 
+  outcome ~ . +
    ( xs_03 + xs_04 + xs_05 + xs_06 ) :
    ( xw_01 + xw_02 + xw_03 ),
   binomial, data=df_prep_cl)
 
 ```{r mod_3D4_3Ac2}
-bp_3D4_3Ac2 <- bp_prep_cl %>% 
-  step_interact( ~ matches("^xs_0[3,4,5,6]{1}") : starts_with("xw"), sep = ":") %>% 
+bp_3D4_3Ac2 <- bp_prep_cl %>%
+  step_interact(~ matches("^xs_0[3,4,5,6]{1}") : starts_with("xw"), sep = ":") %>%
   step_dummy(all_nominal_predictors())
 
 # check # of features with corresponding model (+outcome -intercept)
@@ -96,13 +95,13 @@ bp_3D4_3Ac2 %>% prep(training=df_clas, retain=T) %>% bake(new_data=NULL) %>% nco
 coef(mod_3Ac2) %>% length()
 ```
 
-- `3D5_3Ac3`: interaction from `customer` to the selected continuous inputs. 
+- `3D5_3Ac3`: interaction from `customer` to the selected continuous inputs.  
 
 ```{r mod_3D5_3A3}
-bp_3D5_3Ac3 <- bp_prep_cl %>% 
-  step_dummy(customer, one_hot = T) %>% 
-  step_interact( ~ starts_with("customer_") : matches("^xs_0[3,4,5,6]{1}|^xw+"), sep = ":") %>% 
-  step_rm( matches("^customer_[A-Z]{1}$")) %>% 
+bp_3D5_3Ac3 <- bp_prep_cl %>%
+  step_dummy(customer, one_hot = T) %>%
+  step_interact(~ starts_with("customer_") : matches("^xs_0[3,4,5,6]{1}|^xw+"), sep = ":") %>%
+  step_rm(matches("^customer_[A-Z]{1}$")) %>%
   step_dummy(region)
 
 bp_3D5_3Ac3 %>% prep(training=df_clas, retain=T) %>% bake(new_data=NULL) %>% ncol()
@@ -118,7 +117,7 @@ coef(mod_3Ac3) %>% length()
 **Allow parallel processing.**  
 
 ```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
+if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
@@ -129,11 +128,11 @@ if(parallel::detectCores(logical=FALSE) > 3){
 **Define the resampling scheme.**
 
 - Use 5 fold cross-validation with 5 repeats for resampling.
-- Will compare Accuracy, ROC area under curve metrics. 
+- Will compare Accuracy, ROC area under curve metrics.  
 
 ```{r resample setup}
 set.seed(2543)
-cv_folds <- vfold_cv(df_clas, v = 5, repeats = 5) 
+cv_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
 my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
 glm_spec <- logistic_reg() %>% set_engine("glm")
 ```
@@ -148,7 +147,7 @@ glm_wset <- workflow_set(
     cont_add_only = bp_3D3_3A2,
     inter_selected = bp_3D4_3Ac2,
     inter_customer = bp_3D5_3Ac3
-    ), 
+    ),
   models = list(glm = glm_spec)
   )
 ```
@@ -157,10 +156,10 @@ glm_wset <- workflow_set(
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-tune_3D_glm <- glm_wset %>% 
+tune_3D_glm <- glm_wset %>%
   workflow_map(
     fn = "fit_resamples",
-    resamples = cv_folds, 
+    resamples = cv_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = F),
     verbose = T
@@ -185,30 +184,30 @@ tune_3D_glm <- readr::read_rds("./models/tune_3D_glm")
 
 
 ```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-tune_3D_glm %>% collect_metrics() %>% 
-  ggplot(aes(x=wflow_id, color=wflow_id)) + 
+tune_3D_glm %>% collect_metrics() %>%
+  ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
   labs(color="model")
 ```
 
-- Remove the all pairwise model and the interaction with customer model to zoom in those with better performances. 
+- Remove the all pairwise model and the interaction with customer model to zoom in those with better performances.  
 
 ```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-tune_3D_glm %>% collect_metrics() %>% 
-  filter(!grepl("all_cont_pairwise|inter_customer", wflow_id)) %>% 
-  ggplot(aes(x=wflow_id, color=wflow_id)) + 
+tune_3D_glm %>% collect_metrics() %>%
+  filter(!grepl("all_cont_pairwise|inter_customer", wflow_id)) %>%
+  ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err,ymax=mean+std_err)) +
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
   labs(color="model")
 ```
 
-- For the all input additive model (red, `mod_3D1`) and continuous input additive model (green, `mod_3D3_3A2`), accuracy and ROC AUC performances are similar. 
-- Since from EDA we know the class distribution is skewed (low event probability). Both accuracy and ROC AUC may not properly reflect model performance. Thus I opt to use them as reference, and rely on mean log loss as the metric to select best model. 
+- For the all input additive model (red, `mod_3D1`) and continuous input additive model (green, `mod_3D3_3A2`), accuracy and ROC AUC performances are similar.  
+- Since from EDA we know the class distribution is skewed (low event probability). Both accuracy and ROC AUC may not properly reflect model performance. Thus I opt to use them as reference, and rely on mean log loss as the metric to select best model.  
 - Thus the best model is `mod_3D3_3A2` with continuous variables input additive.  
 
 ### Best Model
@@ -218,11 +217,11 @@ tune_3D_glm %>% collect_metrics() %>%
 ```{r}
 glm_best_wflow_roc <- "cont_add_only_glm"
 
-mod_3D_glm_best_wflow <- glm_wset %>% 
+mod_3D_glm_best_wflow <- glm_wset %>%
   extract_workflow(glm_best_wflow_roc)
 
-mod_3D_glm_best_resample <- 
-  mod_3D_glm_best_wflow %>% 
+mod_3D_glm_best_resample <-
+  mod_3D_glm_best_wflow %>%
   fit_resamples(
     cv_folds,
     metrics = my_metrics,

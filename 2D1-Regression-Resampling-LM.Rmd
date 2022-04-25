@@ -20,7 +20,7 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
 ```
 
 
@@ -31,10 +31,8 @@ Train the 2 predefined linear models and 3 custom basis linear models selected f
 **Create the blueprints for data preprocessing & feature engineering.**  
 
 ```{r preprocess}
-bp_prep <- recipe(response ~ ., data=df_regr) %>% 
-  step_log(all_outcomes()) %>% 
-  step_center(all_numeric_predictors()) %>% 
-  step_scale(all_numeric_predictors())
+bp_prep <- recipe(response ~ ., data=df_regr) %>%
+  step_normalize(all_numeric_predictors())
   # prep(training=df_regr, retain=T) %>% bake(new_data=NULL)
 ```
 
@@ -43,15 +41,15 @@ bp_prep <- recipe(response ~ ., data=df_regr) %>%
 - `2D1`: All categorical and continuous inputs - linear additive features.
 
 ```{r mod_2D1}
-bp_2D1 <- bp_prep %>% 
+bp_2D1 <- bp_prep %>%
   step_dummy(all_nominal_predictors())
 ```
 
 - `2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   
 ```{r mod_2D2}
-bp_2D2 <- bp_prep %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
+bp_2D2 <- bp_prep %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>%
   step_dummy(all_nominal_predictors())
 ```
 
@@ -73,11 +71,11 @@ nonlin_pred <- c("xa_03","xa_05","xa_08",
 ```
 
 
-- `2D3_2Ac1`: Linear additive of the nonlinear features and the rest. 
+- `2D3_2Ac1`: Linear additive of the nonlinear features and the rest.  
 
 ```{r mod_2D3}
-bp_2D3_2Ac1 <- bp_prep %>% 
-  step_ns(all_of(nonlin_pred), deg_free = 2) %>% 
+bp_2D3_2Ac1 <- bp_prep %>%
+  step_ns(all_of(nonlin_pred), deg_free = 2) %>%
   step_dummy(all_nominal_predictors())
 
 # check # of features with corresponding model (+response -intercept)
@@ -88,13 +86,13 @@ coef(mod_2Ac1) %>% length()
 - `2D4_2Ac3`: Interact `region` with only the nonlinear features, additive for the rest.
 
 ```{r mod_2D4}
-bp_2D4_2Ac3 <- bp_prep %>% 
-  step_ns(all_of(nonlin_pred), deg_free = 2) %>% 
-  step_dummy(region, one_hot = T) %>% 
-  step_dummy(customer, one_hot = F) %>% 
-  step_interact( ~ starts_with("region"):contains("_ns_"), sep = ":") %>% 
+bp_2D4_2Ac3 <- bp_prep %>%
+  step_ns(all_of(nonlin_pred), deg_free = 2) %>%
+  step_dummy(region, one_hot = T) %>%
+  step_dummy(customer, one_hot = F) %>%
+  step_interact(~ starts_with("region"):contains("_ns_"), sep = ":") %>%
   # remove the additive nonlinear features and the regions
-  step_rm(starts_with("x") & contains("_ns_")) %>% 
+  step_rm(starts_with("x") & contains("_ns_")) %>%
   step_rm(ends_with("XX"), ends_with("YY"), ends_with("ZZ"))
 
 # check # of features with corresponding model (+response -intercept)
@@ -105,12 +103,12 @@ coef(mod_2Ac3) %>% length()
 - `2D5_2Ac4`: All pairwise interactions for all input variables.  
 
 ```{r mod_2D5}
-bp_2D5_2Ac4 <- bp_prep %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>% 
-  step_dummy(all_nominal_predictors()) %>% 
-  step_interact( ~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>% 
-  step_interact( ~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>% 
-  step_interact( ~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
+bp_2D5_2Ac4 <- bp_prep %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>%
+  step_interact(~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>%
+  step_interact(~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
   
 # check # of features with corresponding model (+response -intercept)
 bp_2D5_2Ac4 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% ncol()
@@ -123,17 +121,6 @@ coef(mod_2Ac4) %>% length()
 
 ### Setup
 
-**Allow parallel processing.**  
-
-```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
-  library(doParallel)
-  num_cores <- parallel::detectCores(logical=FALSE)
-  cl <- makePSOCKcluster(num_cores - 2)
-  registerDoParallel(cl)
-}
-```
-
 **Define the resampling scheme.**
 
 - Use 5 fold cross-validation with 5 repeats for resampling.
@@ -142,7 +129,7 @@ if(parallel::detectCores(logical=FALSE) > 3){
 
 ```{r resample setup}
 set.seed(2543)
-cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5) 
+cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 lm_spec <- linear_reg() %>% set_engine("lm")
 ```
@@ -157,7 +144,7 @@ lm_wset <- workflow_set(
     nonlin_additive = bp_2D3_2Ac1,
     region_interact = bp_2D4_2Ac3,
     all_pairwise = bp_2D5_2Ac4
-    ), 
+    ),
   models = list(lm = lm_spec)
   )
 ```
@@ -165,10 +152,10 @@ lm_wset <- workflow_set(
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-tune_2D_lm <- lm_wset %>% 
+tune_2D_lm <- lm_wset %>%
   workflow_map(
     fn = "fit_resamples",
-    resamples = cv_folds, 
+    resamples = cv_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = F),
     verbose = T
@@ -192,14 +179,14 @@ tune_2D_lm <- readr::read_rds("./models/tune_2D_lm")
 
 **Visualize and compare performances across 5 linear models.**
 
-- Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale. 
+- Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale.  
 
 ```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-tune_2D_lm %>% collect_metrics() %>% 
-  ggplot(aes(x=wflow_id, color=wflow_id)) + 
+tune_2D_lm %>% collect_metrics() %>%
+  ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   scale_y_log10() +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
   labs(color="model")
@@ -208,19 +195,19 @@ tune_2D_lm %>% collect_metrics() %>%
 - Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
 
 ```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
-tune_2D_lm %>% collect_metrics() %>% 
-  filter(!grepl("_pairwise_", wflow_id)) %>% 
-  ggplot(aes(x=wflow_id, color=wflow_id)) + 
+tune_2D_lm %>% collect_metrics() %>%
+  filter(!grepl("_pairwise_", wflow_id)) %>%
+  ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err,ymax=mean+std_err)) +
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
   labs(color="model")
 ```
 
-- Judging from both MAE and RMSE, the best model should be the nonlinear additive model (green, `mod_2D3_2Ac1`). 
-  - With RMSE, both all linear additive model (red, `mod_2D1`), and the nonlinear additive models are good. The model with `region` interaction to nonlinear features (blue, `mod_2D4_2Ac3`) resulted high RMSE. 
-  - For R-Squared, there is no statistically significant difference between the three models. 
+- Judging from both MAE and RMSE, the best model should be the nonlinear additive model (green, `mod_2D3_2Ac1`).  
+  - With RMSE, both all linear additive model (red, `mod_2D1`), and the nonlinear additive models are good. The model with `region` interaction to nonlinear features (blue, `mod_2D4_2Ac3`) resulted high RMSE.  
+  - For R-Squared, there is no statistically significant difference between the three models.  
 
 ### Best Model
 
@@ -229,11 +216,11 @@ tune_2D_lm %>% collect_metrics() %>%
 ```{r}
 lm_best_wflow_mae <- "nonlin_additive_lm"
 
-mod_2D_lm_best_wflow <- lm_wset %>% 
+mod_2D_lm_best_wflow <- lm_wset %>%
   extract_workflow(lm_best_wflow_mae)
 
-mod_2D_lm_best_resample <- 
-  mod_2D_lm_best_wflow %>% 
+mod_2D_lm_best_resample <-
+  mod_2D_lm_best_wflow %>%
   fit_resamples(
     cv_folds,
     metrics = my_metrics,

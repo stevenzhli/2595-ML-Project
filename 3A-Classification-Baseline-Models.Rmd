@@ -29,8 +29,8 @@ sel_cat_in <- setdiff(sel_cat, "outcome")
 
 In this section, several baseline linear models are trained using `glm`.  
 
-- Models are compared based on AIC/BIC. 
-- Important features from models are discussed. 
+- Models are compared based on AIC/BIC.  
+- Important features from models are discussed.  
 
 ----
 
@@ -40,9 +40,9 @@ In this section, several baseline linear models are trained using `glm`.
   - Normalize the continuous inputs  
 
 ```{r}
-df_prep_cl <- df %>% 
-  mutate_if(is.character,as.factor) %>% 
-  select(-c(rowid,response)) %>% 
+df_prep_cl <- df %>%
+  mutate_if(is.character,as.factor) %>%
+  select(-c(rowid,response)) %>%
   mutate(
     across(starts_with("x"), scale)
   )
@@ -84,7 +84,7 @@ mod_3A6 <- glm(outcome ~ (.)^2, binomial, df_num)
 ```
 
 - When the feature space is large (`mod_3A5`, `mod_3A6`), we see some models caused warning.  
-  - This could be caused by overfitting. 
+  - This could be caused by overfitting.  
 
 Get a quick comparison of models using information criterion.  
 
@@ -119,7 +119,7 @@ calc_models_ic(list(mod_3Ac1), T)
 
 ```{r model 3Ac2}
 mod_3Ac2 <- glm(
-  outcome ~ . + 
+  outcome ~ . +
    ( xs_03 + xs_04 + xs_05 + xs_06) :
    ( xw_01 + xw_02 + xw_03 ),
   binomial, data=df_prep_cl)
@@ -141,7 +141,7 @@ calc_models_ic(list(mod_3Ac3), T)
 
 ```{r model 3Ac4}
 mod_3Ac4 <- glm(
-  outcome ~ (.)^2, 
+  outcome ~ (.)^2,
   binomial, df_prep_cl)
 calc_models_ic(list(mod_3Ac4), T)
 ```
@@ -180,7 +180,7 @@ calc_models_ic(my_models, T) %>% knitr::kable()
 ```
 
 - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
-- None of the custom basis models was able to drive down BIC, and only one `mod_3Ac2` barely made the AIC lower. 
+- None of the custom basis models was able to drive down BIC, and only one `mod_3Ac2` barely made the AIC lower.  
 
 - Best models
   - Based on the BIC, select `mod_3A2`.
@@ -198,13 +198,13 @@ coefplot(mod_3Ac2)
 ```
 
 - Each model contains some significant coefficients, but it looks like majority of them are non-significant.
-- The uncertainty for the coefficients are larger than the regression models.    
+- The uncertainty for the coefficients are larger than the regression models.  
 
 
 ### Important Features
 
 - Filter each model for significant coefficients (uncertainty interval do not span 0). Then rank by their estimated coefficients in descending order.  
-  - Those with higher coefficients indicate more impact on the response since the inputs are standardized.   
+  - Those with higher coefficients indicate more impact on the response since the inputs are standardized.  
 
 ```{r}
 pull_lm_coefs_signif(mod_3A2) %>% knitr::kable()
@@ -213,6 +213,6 @@ pull_lm_coefs_signif(mod_3Ac2) %>% knitr::kable()
 ```
 
 - For continuous inputs, potential important ones are `xw_03`, `xn_03`, `xn_07`, `xn_08`, `xa_05`.  
-- For categorical inputs, it appears `customer` is critical in determining the outcome. 
+- For categorical inputs, it appears `customer` is critical in determining the outcome.  
 
 ----

@@ -22,7 +22,7 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
 df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
 ```
 
@@ -39,8 +39,8 @@ Tasks
 
 ## Unpredictable Customer
 
-The best model for the **regression task** was identified in part 2D4 as the XGBoost model. 
-The best model for the **classification task** was identified in part 3D4 as the Elastic Net model. 
+The best model for the **regression task** was identified in part 2D4 as the XGBoost model.  
+The best model for the **classification task** was identified in part 3D4 as the Elastic Net model.  
 
 **Read in the respective best model for each task.**
 
@@ -53,8 +53,8 @@ mod_cl_enet_resample <- readr::read_rds("./models/mod_3D_enet_best_resample")
 ```
 
 
-- To find the most unpredictable customer, need to visualize the prediction with regard to each customer. 
-- The respective resampled predictions are saved in the model resample files, and will be used for model evaluation. 
+- To find the most unpredictable customer, need to visualize the prediction with regard to each customer.  
+- The respective resampled predictions are saved in the model resample files, and will be used for model evaluation.  
 
 ----
 
@@ -63,22 +63,22 @@ mod_cl_enet_resample <- readr::read_rds("./models/mod_3D_enet_best_resample")
 **Summarize the prediction error (MAE) across the resample repeated folds for each customer.** 
 
 ```{r mae, out.width=600, fig.width=6, fig.asp=0.4, message=FALSE, warning=FALSE}
-regr_pred <- mod_rg_xgb_resample %>% 
+regr_pred <- mod_rg_xgb_resample %>%
   # get all predictions across folds and repeats
-  collect_predictions() %>% 
+  collect_predictions() %>%
   # join the training df
   left_join(rowid_to_column(select(df_regr,-response)), by = c(".row" = "rowid"))
 
-regr_pred %>% 
-  group_by(id, id2, customer) %>% 
-  mae(response, .pred) %>% 
-  group_by(customer) %>% 
-  summarise(mae = mean(.estimate), mae_se = se(.estimate)) %>% 
+regr_pred %>%
+  group_by(id, id2, customer) %>%
+  mae(response, .pred) %>%
+  group_by(customer) %>%
+  summarise(mae = mean(.estimate), mae_se = se(.estimate)) %>%
   ggplot() +
   geom_pointrange(aes(
     x=customer,
-    y=mae, 
-    ymax=mae + mae_se, 
+    y=mae,
+    ymax=mae + mae_se,
     ymin = mae - mae_se,
     ))
 ```
@@ -92,14 +92,14 @@ regr_pred %>%
 **Generate the ROC curve for each customer to visualize model performance.**   
 
 ```{r roc, out.width=600, fig.width=6, fig.asp=1, message=FALSE, warning=FALSE}
-clas_pred <- mod_cl_enet_resample %>% 
-  collect_predictions(parameters = mod_cl_enet$param) %>% 
-  left_join(rowid_to_column(select(df_clas,-outcome)), by = c(".row" = "rowid"))    
-  
-clas_pred %>% 
-  group_by(customer) %>% 
-  roc_curve(outcome, .pred_event) %>% 
-  autoplot() + facet_wrap(~ customer) + 
+clas_pred <- mod_cl_enet_resample %>%
+  collect_predictions(parameters = mod_cl_enet$param) %>%
+  left_join(rowid_to_column(select(df_clas,-outcome)), by = c(".row" = "rowid"))
+
+clas_pred %>%
+  group_by(customer) %>%
+  roc_curve(outcome, .pred_event) %>%
+  autoplot() + facet_wrap(~ customer) +
   theme(legend.position = "none")
 ```
 
@@ -108,21 +108,21 @@ clas_pred %>%
 **Summarize the mean log loss across the resample repeated folds for each customer.** 
 
 ```{r mll, out.width=600, fig.width=6, fig.asp=0.4, message=FALSE, warning=FALSE}
-clas_pred %>% 
-  group_by(id, id2, customer) %>% 
-  mn_log_loss(outcome, .pred_event) %>% 
-  group_by(customer) %>% 
-  summarise(mn_log_loss = mean(.estimate), se = se(.estimate)) %>% 
+clas_pred %>%
+  group_by(id, id2, customer) %>%
+  mn_log_loss(outcome, .pred_event) %>%
+  group_by(customer) %>%
+  summarise(mn_log_loss = mean(.estimate), se = se(.estimate)) %>%
   ggplot() +
   geom_pointrange(aes(
     x=customer,
-    y=mn_log_loss, 
-    ymax=mn_log_loss + se, 
+    y=mn_log_loss,
+    ymax=mn_log_loss + se,
     ymin = mn_log_loss - se,
     ))
 ```
 
-- The `outcome` from customer `Other` appears to be the most difficult to predict using my best classification model. Followed by customer A and Q. 
+- The `outcome` from customer `Other` appears to be the most difficult to predict using my best classification model. Followed by customer A and Q.  
 
 
 ----

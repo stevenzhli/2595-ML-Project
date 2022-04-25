@@ -39,39 +39,39 @@ Train the following advanced models for the classification.
 **The preprocessing steps.**
 
 ```{r}
-bp_3D <- recipe(outcome ~ ., data=df_clas) %>% 
+bp_3D <- recipe(outcome ~ ., data=df_clas) %>%
   step_dummy(all_nominal_predictors())
-bp_3D_norm <- bp_3D %>% 
+bp_3D_norm <- bp_3D %>%
   step_normalize(all_numeric_predictors())
 ```
 
 **Model specifications.**
   
 ```{r}
-nnet_spec <- 
-  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>% 
-  set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>% 
+nnet_spec <-
+  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>%
+  set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>%
   set_mode("classification")
 
-rf_spec <- 
-   rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
-   set_engine("ranger") %>% 
+rf_spec <-
+   rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
+   set_engine("ranger") %>%
    set_mode("classification")
 
-xgb_spec <- 
-   boost_tree(tree_depth = tune(), learn_rate = tune(), 
-              trees = tune(), mtry = tune(), sample_size = tune()) %>% 
-   set_engine("xgboost") %>% 
+xgb_spec <-
+   boost_tree(tree_depth = tune(), learn_rate = tune(),
+              trees = tune(), mtry = tune(), sample_size = tune()) %>%
+   set_engine("xgboost") %>%
    set_mode("classification")
 
-mars_spec <- 
+mars_spec <-
    mars(prod_degree = tune()) %>%  #<- use GCV to choose terms
-   set_engine("earth") %>% 
+   set_engine("earth") %>%
    set_mode("classification")
 
-svm_spec <- 
-   svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
-   set_engine("kernlab") %>% 
+svm_spec <-
+   svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+   set_engine("kernlab") %>%
    set_mode("classification")
 ```
 
@@ -80,7 +80,7 @@ svm_spec <-
 **Create two workflows based on whether input normalization preprocessing is required.**  
 
 ```{r normalized}
-adv_wset_norm_cl <- 
+adv_wset_norm_cl <-
   workflow_set(
     preproc = list(bp_3D_norm),
     models = list(
@@ -91,13 +91,13 @@ adv_wset_norm_cl <-
 ```
 
 ```{r not-normalized}
-adv_wset_no_preproc_cl <- 
+adv_wset_no_preproc_cl <-
   workflow_set(
     preproc = list(bp_3D),
     models = list(
       MARS = mars_spec,
       RF = rf_spec,
-      XGB = xgb_spec 
+      XGB = xgb_spec
     )
   )
 ```
@@ -105,7 +105,7 @@ adv_wset_no_preproc_cl <-
 **Combine the workflows into one for training. **  
 
 ```{r}
-adv_wset_all_cl <- bind_rows(adv_wset_no_preproc_cl, adv_wset_norm_cl) %>% 
+adv_wset_all_cl <- bind_rows(adv_wset_no_preproc_cl, adv_wset_norm_cl) %>%
   mutate(wflow_id = gsub("(recipe_)","",wflow_id))
 ```
 
@@ -116,7 +116,7 @@ adv_wset_all_cl <- bind_rows(adv_wset_no_preproc_cl, adv_wset_norm_cl) %>%
 **Allow parallel processing.**  
 
 ```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
+if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
@@ -137,7 +137,7 @@ my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
 **Perform model tuning with default grid and 10 levels at each tuning parameter.**  
 
 ```{r message=FALSE, warning=FALSE}
-tune_3D_adv <- adv_wset_all_cl %>% 
+tune_3D_adv <- adv_wset_all_cl %>%
   workflow_map(
     fn = "tune_grid",
     resamples = adv_folds,
@@ -176,21 +176,21 @@ tune_3D_adv %>% rank_results(rank_metric = "mn_log_loss", select_best = T)
 
 ```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 names(tune_3D_adv$result) <- tune_3D_adv$wflow_id
-tune_3D_adv %>% 
-  autoplot( 
+tune_3D_adv %>%
+  autoplot(
     rank_metric = "mn_log_loss",
     metric = c("accuracy","roc_auc","mn_log_loss"),
-    select_best = T) + 
+    select_best = T) +
   geom_text(
-    aes(y = mean, label = wflow_id), 
-    nudge_x = 0.2, angle = 90) + 
+    aes(y = mean, label = wflow_id),
+    nudge_x = 0.2, angle = 90) +
   theme(legend.position = "none")
 ```
 
-- Judging from the mean log loss, the best model from either SVM, RF, or XGB are preferred (lowest loss). 
-  - For ROC, best one from SVM resulted highest AUC, but the best RF model has no significant difference. 
-  - For accuracy, the XGB model has best performance, and there is no significant difference from RF. 
-- Overall, best model in RF has the best performances across all three metrics. Thus is selected as the best model. 
+- Judging from the mean log loss, the best model from either SVM, RF, or XGB are preferred (lowest loss).  
+  - For ROC, best one from SVM resulted highest AUC, but the best RF model has no significant difference.  
+  - For accuracy, the XGB model has best performance, and there is no significant difference from RF.  
+- Overall, best model in RF has the best performances across all three metrics. Thus is selected as the best model.  
 
 ### Best Model
 
@@ -199,8 +199,8 @@ tune_3D_adv %>%
 ```{r}
 adv_best_wf_cl <- "RF"
 
-adv_best_roc_params <- 
-  tune_3D_adv$result[[adv_best_wf_cl]] %>% 
+adv_best_roc_params <-
+  tune_3D_adv$result[[adv_best_wf_cl]] %>%
   select_by_one_std_err(mtry, min_n, metric = "mn_log_loss")
 adv_best_roc_params %>% select(-starts_with("."))
 ```
@@ -208,15 +208,15 @@ adv_best_roc_params %>% select(-starts_with("."))
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
-mod_3D_adv_best_wflow <- 
-  adv_wset_all_cl %>% 
-  extract_workflow(adv_best_wf_cl) %>% 
+mod_3D_adv_best_wflow <-
+  adv_wset_all_cl %>%
+  extract_workflow(adv_best_wf_cl) %>%
   finalize_workflow(
     parameters = adv_best_roc_params
   )
 
-mod_3D_adv_best_resample <- 
-  mod_3D_adv_best_wflow %>% 
+mod_3D_adv_best_resample <-
+  mod_3D_adv_best_wflow %>%
   fit_resamples(
     resamples = adv_folds,
     metrics = my_metrics,

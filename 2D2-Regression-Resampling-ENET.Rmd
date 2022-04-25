@@ -20,7 +20,7 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
 ```
 
 ## Elastic Net
@@ -34,10 +34,8 @@ Use Elastic Net to provide regularization to the two complex models that resulte
 - The preprocessing steps
 
 ```{r}
-bp_prep <- recipe(response ~ ., data=df_regr) %>% 
-  step_log(all_outcomes()) %>% 
-  step_center(all_numeric_predictors()) %>% 
-  step_scale(all_numeric_predictors())
+bp_prep <- recipe(response ~ ., data=df_regr) %>%
+  step_normalize(all_numeric_predictors())
   # prep(training=df_regr, retain=T) %>% bake(new_data=NULL)
 ```
 
@@ -45,20 +43,20 @@ bp_prep <- recipe(response ~ ., data=df_regr) %>%
   - Must manually create the dummy variables for `glmnet` to work properly.
   
 ```{r mod_2D2}
-bp_2D2 <- bp_prep %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
+bp_2D2 <- bp_prep %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>%
   step_dummy( all_nominal_predictors() )
 ```
 
 - `mod_2D5_2Ac4`: All pairwise interactions for all input variables. (`mod_2Ac4`)
 
 ```{r mod_2D5}
-bp_2D5_2Ac4 <- bp_prep %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>% 
-  step_dummy(all_nominal_predictors()) %>% 
-  step_interact( ~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>% 
-  step_interact( ~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>% 
-  step_interact( ~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
+bp_2D5_2Ac4 <- bp_prep %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep=":") %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>%
+  step_interact(~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>%
+  step_interact(~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
 ```
 
 ----
@@ -72,33 +70,33 @@ bp_2D5_2Ac4 <- bp_prep %>%
 Define the Lasso only model specification.  
 
 ```{r}
-lasso_explore_spec <- 
-  linear_reg(penalty = 0.1, mixture = 1) %>% 
+lasso_explore_spec <-
+  linear_reg(penalty = 0.1, mixture = 1) %>%
   set_engine("glmnet", intercept = TRUE)
 ```
 
 Fit both models with Lasso.
 
 ```{r}
-lasso_fit_2D2 <- workflow() %>% 
-  add_model(lasso_explore_spec) %>% 
-  add_recipe(bp_2D2) %>% 
+lasso_fit_2D2 <- workflow() %>%
+  add_model(lasso_explore_spec) %>%
+  add_recipe(bp_2D2) %>%
   fit(df_regr)
 
-lasso_fit_2D5 <- workflow() %>% 
-  add_model(lasso_explore_spec) %>% 
-  add_recipe(bp_2D5_2Ac4) %>% 
+lasso_fit_2D5 <- workflow() %>%
+  add_model(lasso_explore_spec) %>%
+  add_recipe(bp_2D5_2Ac4) %>%
   fit(df_regr)
 ```
 
 Generate the coefficient paths.
 
 ```{r}
-lasso_fit_2D2 %>% extract_fit_parsnip() %>% 
-  pluck('fit') %>% 
+lasso_fit_2D2 %>% extract_fit_parsnip() %>%
+  pluck('fit') %>%
   plot(xvar = 'lambda')
-lasso_fit_2D5 %>% extract_fit_parsnip() %>% 
-  pluck('fit') %>% 
+lasso_fit_2D5 %>% extract_fit_parsnip() %>%
+  pluck('fit') %>%
   plot(xvar = 'lambda')
 ```
 
@@ -107,7 +105,7 @@ lasso_fit_2D5 %>% extract_fit_parsnip() %>%
 **Allow parallel processing.**  
 
 ```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
+if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
@@ -118,7 +116,7 @@ if(parallel::detectCores(logical=FALSE) > 3){
 **Create the custom search grid for the penalty strength and mixing fraction parameters.**
 
 - Use the bound of penalty strength for the range of parameters I am interested to tune.
-- Use 0.1 as lower bound for mixing fraction to avoid fully Ridge. 
+- Use 0.1 as lower bound for mixing fraction to avoid fully Ridge.  
 
 ```{r tuning grid}
 # set tuning parameter ranges
@@ -126,7 +124,7 @@ my_lambda <- penalty(range = c(-6,-2), trans = log_trans())
 my_alpha <- mixture(range = c(0.1, 1.0))
 # construct the tuning grid
 enet_grid <- grid_regular(
-  my_lambda, my_alpha, 
+  my_lambda, my_alpha,
   levels = c(penalty = 80, mixture = 5))
 ```
 
@@ -145,15 +143,15 @@ my_metrics <- metric_set(rmse, mae, rsq)
 
 ```{r workflow}
 enet_spec <-
-  linear_reg(penalty = tune(), mixture = tune()) %>% 
+  linear_reg(penalty = tune(), mixture = tune()) %>%
   set_engine("glmnet", intercept = TRUE, standardize = TRUE)
 
-enet_wset <- 
+enet_wset <-
   workflow_set(
     preproc = list(
       all_cont_pairwise = bp_2D2,
       all_pairwise = bp_2D5_2Ac4
-      ), 
+      ),
     models = list(enet = enet_spec)
   )
 ```
@@ -161,11 +159,11 @@ enet_wset <-
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-tune_2D_enet <- enet_wset %>% 
+tune_2D_enet <- enet_wset %>%
   workflow_map(
     fn = "tune_grid",
     grid = enet_grid,
-    resamples = enet_folds, 
+    resamples = enet_folds,
     metrics = my_metrics,
     control = control_grid(
       # save_pred = TRUE,
@@ -195,13 +193,13 @@ tune_2D_enet <- readr::read_rds("./models/tune_2D_enet")
 ```{r visualize, out.width=800, fig.width=8, fig.asp=1, message=FALSE, warning=FALSE}
 names(tune_2D_enet$result) <- tune_2D_enet$wflow_id
 
-tune_2D_enet$result %>% 
-  map_dfr(collect_metrics, .id="wflow_id") %>% 
+tune_2D_enet$result %>%
+  map_dfr(collect_metrics, .id="wflow_id") %>%
   ggplot(aes(x = log(penalty))) +
   geom_ribbon(
     aes(ymin = mean - std_err, ymax = mean + std_err,
         group = interaction(mixture, .metric),
-        fill = as.factor(mixture)), 
+        fill = as.factor(mixture)),
     alpha = 0.3) +
   geom_line(
     aes(y = mean,
@@ -222,32 +220,32 @@ tune_2D_enet$result %>%
 **Select the best tuning parameters based on the one-standard-error rule.**  
 
 ```{r}
-enet_best_mae_params <- 
-  tune_2D_enet$result %>% 
-  map_dfr(select_by_one_std_err, 
+enet_best_mae_params <-
+  tune_2D_enet$result %>%
+  map_dfr(select_by_one_std_err,
             desc(penalty), desc(mixture), metric = 'mae',
           .id = "wflow_id")
 enet_best_mae_params %>% select(-starts_with("."))
 ```
 
-- Comparing across the best of two models, the "all pairwise interactions" one has clear greater MAE performance. 
+- Comparing across the best of two models, the "all pairwise interactions" one has clear greater MAE performance.  
 
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
 enet_best_wflow_mae <- "all_pairwise_enet"
 
-mod_2D_enet_best_wflow <- 
-  enet_wset %>% 
-  extract_workflow(enet_best_wflow_mae) %>% 
+mod_2D_enet_best_wflow <-
+  enet_wset %>%
+  extract_workflow(enet_best_wflow_mae) %>%
   finalize_workflow(
-    parameters = enet_best_mae_params %>% 
+    parameters = enet_best_mae_params %>%
       filter(wflow_id==enet_best_wflow_mae) %>%
       select(all_of(names(enet_grid)))
   )
 
-mod_2D_enet_best_resample <- 
-  mod_2D_enet_best_wflow %>% 
+mod_2D_enet_best_resample <-
+  mod_2D_enet_best_wflow %>%
   fit_resamples(
     resamples = enet_folds,
     metrics = my_metrics,

@@ -34,7 +34,9 @@ df %>% select(region, customer, binary_outcome) %>%
   summarise(.groups="drop", event_prob=mean(binary_outcome)) %>%
   ggplot(aes(x=customer, y=region)) +
   geom_count(aes(size=event_prob, color=event_prob),shape="square") +
-  geom_text(aes(label=round(event_prob,2)), nudge_y=0.1) + 
+  geom_text(aes(label=round(event_prob,2)), nudge_y=0.1) +
   guides(color = "legend")+
   theme_linedraw()
 ```
+
+

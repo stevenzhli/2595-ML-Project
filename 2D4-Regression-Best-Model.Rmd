@@ -38,28 +38,28 @@ my_models <- mget(ls(pattern = "^mod_2D.+_resample"))
 **Compare model parameters. **
 
 ```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
-my_models %>% 
-  map_dfr(collect_metrics, .id="model") %>% 
+my_models %>%
+  map_dfr(collect_metrics, .id="model") %>%
   ggplot(aes(x=model, color=model)) +
   geom_pointrange(
     aes(y = mean, ymin = mean - std_err, ymax = mean + std_err, group = model)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
 - The best model (XGB) from the set of advanced models has the overall best performance among all models trained.
-- The worst performance is from the best model fit from manually constructed baseline linear models. 
+- The worst performance is from the best model fit from manually constructed baseline linear models.  
 
 **Visualize predicted vs observed.**  
 
 ```{r predicted vs observed, out.width=900, fig.width=9, fig.asp=0.5, message=FALSE, warning=FALSE}
-my_models %>% 
-  map_dfr(collect_predictions, .id="model") %>% 
+my_models %>%
+  map_dfr(collect_predictions, .id="model") %>%
   ggplot(aes(x=response, y=.pred)) +
   geom_abline(color = "grey50", lty = 2) +
-  geom_point(alpha = 0.25, size = 0.25) +
-  facet_wrap( ~ model) +
-  coord_obs_pred() + 
+  geom_point(alpha = 0.1, size = 0.25) +
+  facet_wrap(~ model) +
+  coord_obs_pred() +
   labs(x = "observed", y = "predicted")
 ```
 

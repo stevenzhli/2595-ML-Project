@@ -38,44 +38,44 @@ my_models <- mget(ls(pattern = "^mod_3D.+_resample"))
 **Compare model parameters. **
 
 ```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
-my_models %>% 
-  map_dfr(collect_metrics, .id="model") %>% 
+my_models %>%
+  map_dfr(collect_metrics, .id="model") %>%
   ggplot(aes(x=model, color=model)) +
   geom_pointrange(
     aes(y = mean, ymin = mean - std_err, ymax = mean + std_err, group = model)) +
-  facet_wrap( ~ .metric, scales = "free_y") +
+  facet_wrap(~ .metric, scales = "free_y") +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
 - To maximize ROC AUC, the Elastic Net model (green) is the best.
-- To maximize accuracy, the manually crafted logistic regression models (blue) is the best. 
-- To minimize mean log loss, both advanced model with RF (red) and Elastic Net model (green) have no significant difference. 
+- To maximize accuracy, the manually crafted logistic regression models (blue) is the best.  
+- To minimize mean log loss, both advanced model with RF (red) and Elastic Net model (green) have no significant difference.  
 
-- Based on min log loss and ROC, I will pick the Elastic Net model as best model. 
+- Based on min log loss and ROC, I will pick the Elastic Net model as best model.  
 
 **Visualize the ROC curves for the three models. **
 
 ```{r message=FALSE, warning=FALSE}
-my_models %>% 
+my_models %>%
   map_dfr(collect_predictions, .id="model") %>%
-  group_by(model) %>% 
-  roc_curve(outcome, .pred_event) %>% 
+  group_by(model) %>%
+  roc_curve(outcome, .pred_event) %>%
   autoplot()
 ```
 
-- The ROC curve of the three models are quite similar when averaged across the resamples.   
+- The ROC curve of the three models are quite similar when averaged across the resamples.  
 
 **Visualize the ROC curve w.r.t each repeated resample folds. **  
 
 ```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
-my_models %>% 
+my_models %>%
   map_dfr(collect_predictions, .id="model") %>%
-  group_by(model, id, id2) %>% 
-  roc_curve(outcome, .pred_event) %>% 
-  autoplot() + facet_wrap(~ model) + 
+  group_by(model, id, id2) %>%
+  roc_curve(outcome, .pred_event) %>%
+  autoplot() + facet_wrap(~ model) +
   theme(legend.position = "none")
 ```
 
-- We see that the best model of manually crafted features has largest performance variations across different resampling folds (rightmost). While the Elastic Net model has relatively smaller variations (middle). This is consistent with previous plots on the uncertainty of the ROC AUC. 
+- We see that the best model of manually crafted features has largest performance variations across different resampling folds (rightmost). While the Elastic Net model has relatively smaller variations (middle). This is consistent with previous plots on the uncertainty of the ROC AUC.  
 
 ----

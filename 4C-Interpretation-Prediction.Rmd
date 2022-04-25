@@ -22,8 +22,8 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
-df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
+df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
+df_clas <- df %>% select(-c(rowid,response))
 ```
 
 ----
@@ -48,24 +48,28 @@ Tasks
 
 ```{r}
 mod_rg_xgb <- readr::read_rds("./models/mod_2D_adv_best_wflow")
+mod_rg_xgb_fit <- mod_rg_xgb %>% fit(df_regr)
+
 mod_cl_enet <- readr::read_rds("./models/mod_3D_enet_best_wflow")
+mod_cl_enet_fit <- mod_cl_enet %>% fit(df_clas)
 ```
 
 ----
 
 ## Regression
 
-For my best regression model, the most important feature is the `xw_01`. 
+For my best regression model, the most important feature is the `xw_01`, and the most unpredictable customer is `K`, which is only present in region `ZZ`.  
 
 ```{r}
-
+my_inputs <- setdiff(names(df_regr),"response")
+viz_grid <- make_test_input_grid(my_inputs, df_regr, c("xw_01")) %>% mutate(customer = "K", region = "ZZ")
 ```
 
 ----
 
 ## Classification
 
-For my best classification model, the top 2 most important features are `xn_01`, `xn_03`. 
+For my best classification model, the top 2 most important features are `xn_01`, `xn_03`.  
 
 
 

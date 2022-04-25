@@ -20,7 +20,7 @@ source("./scripts/utils.R")
 
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
-df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
 ```
 
 ## Advanced Models
@@ -38,40 +38,39 @@ Train the following advanced models for the regression.
 **The preprocessing steps.**
 
 ```{r}
-bp_2D_log <- recipe(response ~ ., data=df_regr) %>% 
-  step_log(all_outcomes()) %>% 
+bp_2D_dummy <- recipe(response ~ ., data=df_regr) %>%
   step_dummy(all_nominal_predictors())
-bp_2D_norm <- bp_2D_log %>% 
+bp_2D_norm <- bp_2D_dummy %>%
   step_normalize(all_numeric_predictors())
 ```
 
 **Model specifications.**
   
 ```{r}
-nnet_spec <- 
-  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>% 
-  set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>% 
+nnet_spec <-
+  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>%
+  set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>%
   set_mode("regression")
 
-rf_spec <- 
-   rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
-   set_engine("ranger") %>% 
+rf_spec <-
+   rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
+   set_engine("ranger") %>%
    set_mode("regression")
 
-xgb_spec <- 
-   boost_tree(tree_depth = tune(), learn_rate = tune(), 
-              trees = tune(), mtry = tune(), sample_size = tune()) %>% 
-   set_engine("xgboost") %>% 
+xgb_spec <-
+   boost_tree(tree_depth = tune(), learn_rate = tune(),
+              trees = tune(), mtry = tune(), sample_size = tune()) %>%
+   set_engine("xgboost") %>%
    set_mode("regression")
 
-mars_spec <- 
+mars_spec <-
    mars(prod_degree = tune()) %>%  #<- use GCV to choose terms
-   set_engine("earth") %>% 
+   set_engine("earth") %>%
    set_mode("regression")
 
-svm_spec <- 
-   svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
-   set_engine("kernlab") %>% 
+svm_spec <-
+   svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+   set_engine("kernlab") %>%
    set_mode("regression")
 ```
 
@@ -80,7 +79,7 @@ svm_spec <-
 **Create two workflows based on whether input normalization preprocessing is required.**  
 
 ```{r normalized}
-adv_wset_norm <- 
+adv_wset_norm <-
   workflow_set(
     preproc = list(bp_2D_norm),
     models = list(
@@ -91,13 +90,13 @@ adv_wset_norm <-
 ```
 
 ```{r not-normalized}
-adv_wset_no_preproc <- 
+adv_wset_no_preproc <-
   workflow_set(
-    preproc = list(bp_2D_log),
+    preproc = list(bp_2D_dummy),
     models = list(
       MARS = mars_spec,
       RF = rf_spec,
-      XGB = xgb_spec 
+      XGB = xgb_spec
     )
   )
 ```
@@ -105,7 +104,7 @@ adv_wset_no_preproc <-
 **Combine the workflows into one for training. **  
 
 ```{r}
-adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>% 
+adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>%
   mutate(wflow_id = gsub("(recipe_)","",wflow_id))
 ```
 
@@ -116,7 +115,7 @@ adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>%
 **Allow parallel processing.**  
 
 ```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
+if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
@@ -137,7 +136,7 @@ my_metrics <- metric_set(rmse, mae, rsq)
 **Perform model tuning with default grid and 10 levels at each tuning parameter.**  
 
 ```{r message=FALSE, warning=FALSE}
-tune_2D_adv <- adv_wset_all %>% 
+tune_2D_adv <- adv_wset_all %>%
   workflow_map(
     fn = "tune_grid",
     resamples = adv_folds,
@@ -176,18 +175,18 @@ tune_2D_adv %>% rank_results(rank_metric = "mae", select_best = T)
 
 ```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 names(tune_2D_adv$result) <- tune_2D_adv$wflow_id
-tune_2D_adv %>% 
-  autoplot( 
+tune_2D_adv %>%
+  autoplot(
     rank_metric = "mae",
     metric = c("mae","rmse","rsq"),
-    select_best = T) + 
+    select_best = T) +
   geom_text(
-    aes(y = mean, label = wflow_id), 
-    nudge_x = 0.2, angle = 90) + 
+    aes(y = mean, label = wflow_id),
+    nudge_x = 0.2, angle = 90) +
   theme(legend.position = "none")
 ```
 
-- Judging from the visualization, XGB method has best performance for all three metrics. 
+- Judging from the visualization, XGB method has best performance for all three metrics.  
   
 
 ### Best Model
@@ -197,8 +196,8 @@ tune_2D_adv %>%
 ```{r}
 adv_best_wf <- "XGB"
 
-adv_best_mae_params <- 
-  tune_2D_adv$result[[adv_best_wf]] %>% 
+adv_best_mae_params <-
+  tune_2D_adv$result[[adv_best_wf]] %>%
   select_by_one_std_err(tree_depth, learn_rate, trees, mtry, sample_size, metric = "mae")
 adv_best_mae_params %>% select(-starts_with("."))
 ```
@@ -207,14 +206,14 @@ adv_best_mae_params %>% select(-starts_with("."))
 
 ```{r}
 mod_2D_adv_best_wflow <-
-  adv_wset_all %>% 
-  extract_workflow(adv_best_wf) %>% 
+  adv_wset_all %>%
+  extract_workflow(adv_best_wf) %>%
   finalize_workflow(
     parameters = adv_best_mae_params
   )
 
 mod_2D_adv_best_resample <-
-  mod_2D_adv_best_wflow %>% 
+  mod_2D_adv_best_wflow %>%
   fit_resamples(
     resamples = adv_folds,
     metrics = my_metrics,

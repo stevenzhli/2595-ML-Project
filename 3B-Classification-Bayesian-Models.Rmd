@@ -39,9 +39,9 @@ In this section, I will use Bayesian approach to evaluate 3 baseline logistic mo
   - Normalize the continuous inputs
 
 ```{r}
-df_prep_cl <- df %>% 
-  mutate_if(is.character,as.factor) %>% 
-  select(-c(rowid,response)) %>% 
+df_prep_cl <- df %>%
+  mutate_if(is.character,as.factor) %>%
+  select(-c(rowid,response)) %>%
   mutate(
     across(starts_with("x"), scale)
   )
@@ -54,7 +54,7 @@ df_prep_cl <- df %>%
 - Based on the best BIC, select `mod_3A2`. This is also the simplest model among these three.  
 - Based on balance of the two, select `mod_3A3`. This model adds categorical inputs.  
 - Based on the best AIC, select `mod_3Ac2`.  
-- I will use weak prior of R-squared 0.5. 
+- I will use weak prior of R-squared 0.5.  
 
 ```{r}
 mod_3A2 <- readr::read_rds("models/mod_3A2")
@@ -129,7 +129,7 @@ loo_compare(my_models, criterion = "waic")
 ```
 
 - Based on WAIC, the three models really do not have much performance differences.  
-- Thus the simplest model, 3B1_3A2, where only have the continuous inputs linear added, should be picked as the best model. 
+- Thus the simplest model, 3B1_3A2, where only have the continuous inputs linear added, should be picked as the best model.  
 
 ### Best Model
 
@@ -156,12 +156,12 @@ plot(mod_3B1_3A2, pars = names(mod_3B1_3A2$coefficients)) +
 **Check the correlation of the posterior coefficients.**  
 
 ```{r Correlations, out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
-mod_3B1_3A2 %>% as_tibble() %>% 
-  select(all_of(names(mod_3B1_3A2$coefficients))) %>% 
+mod_3B1_3A2 %>% as_tibble() %>%
+  select(all_of(names(mod_3B1_3A2$coefficients))) %>%
   cor() %>% corrplot(method="color", type="upper")
 ```
 
-- The correlation of coefficients are from the correlation of corresponding input terms as in EDA. 
+- The correlation of coefficients are from the correlation of corresponding input terms as in EDA.  
 
 
 ----

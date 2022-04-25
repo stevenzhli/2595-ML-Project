@@ -33,9 +33,8 @@ Use Elastic Net to provide regularization to the two complex models that resulte
 **Define the linear models to tune with Elastic Net.**  
 
 ```{r preprocess}
-bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>% 
-  step_center(all_numeric_predictors()) %>% 
-  step_scale(all_numeric_predictors())
+bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>%
+  step_normalize(all_numeric_predictors())
   #prep(training=df_clas, retain=T) %>% bake(new_data=NULL)
 ```
 
@@ -43,17 +42,17 @@ bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>%
 - `mod_3D2`: All pairwise interactions of continuous inputs, include additive categorical features.
   
 ```{r mod_3D2}
-bp_3D2 <- bp_prep_cl %>% 
-  step_interact( ~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>% 
+bp_3D2 <- bp_prep_cl %>%
+  step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>%
   step_dummy(all_nominal_predictors())
 ```
 
-- `mod_3D6_3A5`: interact `customer` with continuous inputs. 
+- `mod_3D6_3A5`: interact `customer` with continuous inputs.  
 
 ```{r mod_3D6_3A5}
-bp_3D6_3A5 <- bp_prep_cl %>% 
-  step_dummy(customer, one_hot = T) %>% 
-  step_interact( ~ starts_with("customer_") : starts_with("x"), sep = ":") %>% 
+bp_3D6_3A5 <- bp_prep_cl %>%
+  step_dummy(customer, one_hot = T) %>%
+  step_interact(~ starts_with("customer_") : starts_with("x"), sep = ":") %>%
   step_dummy(region)
 ```
 
@@ -68,42 +67,42 @@ bp_3D6_3A5 <- bp_prep_cl %>%
 Define the Lasso only model specification.  
 
 ```{r}
-lasso_explore_spec_cl <- 
-  logistic_reg(penalty = 0.1, mixture = 1) %>% 
-  set_engine("glmnet", intercept = T, standardize = F, family = "binomial") %>% 
+lasso_explore_spec_cl <-
+  logistic_reg(penalty = 0.1, mixture = 1) %>%
+  set_engine("glmnet", intercept = T, standardize = F, family = "binomial") %>%
   set_mode("classification")
 ```
 
 Fit both models with Lasso.
 
 ```{r}
-lasso_fit_3D2 <- workflow() %>% 
-  add_model(lasso_explore_spec_cl) %>% 
-  add_recipe(bp_3D2) %>% 
+lasso_fit_3D2 <- workflow() %>%
+  add_model(lasso_explore_spec_cl) %>%
+  add_recipe(bp_3D2) %>%
   fit(df_clas)
 
-lasso_fit_3D6 <- workflow() %>% 
-  add_model(lasso_explore_spec_cl) %>% 
-  add_recipe(bp_3D6_3A5) %>% 
+lasso_fit_3D6 <- workflow() %>%
+  add_model(lasso_explore_spec_cl) %>%
+  add_recipe(bp_3D6_3A5) %>%
   fit(df_clas)
 ```
 
 Generate the coefficient paths.
 
 ```{r}
-lasso_fit_3D2 %>% extract_fit_parsnip() %>% 
-  pluck('fit') %>% 
-  plot(xvar = 'lambda')
-lasso_fit_3D6 %>% extract_fit_parsnip() %>% 
-  pluck('fit') %>% 
-  plot(xvar = 'lambda')
+lasso_fit_3D2 %>% extract_fit_parsnip() %>%
+  pluck("fit") %>%
+  plot(xvar = "lambda")
+lasso_fit_3D6 %>% extract_fit_parsnip() %>%
+  pluck("fit") %>%
+  plot(xvar = "lambda")
 ```
 ### Setup
 
 **Allow parallel processing.**  
 
 ```{r message=FALSE, warning=FALSE}
-if(parallel::detectCores(logical=FALSE) > 3){
+if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
@@ -114,7 +113,7 @@ if(parallel::detectCores(logical=FALSE) > 3){
 **Create the custom search grid for the penalty strength and mixing fraction parameters.**
 
 - Use the bound of penalty strength for the range of parameters I am interested to tune.
-- Use 0.1 as lower bound for mixing fraction to avoid fully Ridge. 
+- Use 0.1 as lower bound for mixing fraction to avoid fully Ridge.  
 
 ```{r tuning grid}
 # set tuning parameter ranges
@@ -122,7 +121,7 @@ my_lambda <- penalty(range = c(-8,-2), trans = log_trans())
 my_alpha <- mixture(range = c(0.1, 1.0))
 # construct the tuning grid
 enet_grid_cl <- grid_regular(
-  my_lambda, my_alpha, 
+  my_lambda, my_alpha,
   levels = c(penalty = 60, mixture = 5))
 ```
 
@@ -141,16 +140,16 @@ my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
 
 ```{r workflow}
 enet_spec_cl <-
-  logistic_reg(penalty = tune(), mixture = tune()) %>% 
-  set_engine("glmnet", intercept = T, standardize = F, family = "binomial") %>% 
+  logistic_reg(penalty = tune(), mixture = tune()) %>%
+  set_engine("glmnet", intercept = T, standardize = F, family = "binomial") %>%
   set_mode("classification")
 
-enet_wset_cl <- 
+enet_wset_cl <-
   workflow_set(
     preproc = list(
       all_cont_pairwise = bp_3D2,
       inter_customer_cont = bp_3D6_3A5
-      ), 
+      ),
     models = list(enet = enet_spec_cl)
   )
 ```
@@ -158,11 +157,11 @@ enet_wset_cl <-
 ### Execute
 
 ```{r message=FALSE, warning=FALSE}
-tune_3D_enet <- enet_wset_cl %>% 
+tune_3D_enet <- enet_wset_cl %>%
   workflow_map(
     fn = "tune_grid",
     grid = enet_grid_cl,
-    resamples = enet_folds, 
+    resamples = enet_folds,
     metrics = my_metrics,
     control = control_grid(
       # save_pred = TRUE,
@@ -192,8 +191,8 @@ tune_3D_enet <- readr::read_rds("./models/tune_3D_enet")
 ```{r visualize tuning, out.width=800, fig.width=8, fig.asp=.6, message=FALSE, warning=FALSE}
 names(tune_3D_enet$result) <- tune_3D_enet$wflow_id
 
-tune_3D_enet$result %>% 
-  map_dfr(collect_metrics, .id="wflow_id") %>% 
+tune_3D_enet$result %>%
+  map_dfr(collect_metrics, .id="wflow_id") %>%
   ggplot(aes(x = log(penalty))) +
   geom_ribbon(
     aes(ymin = mean - std_err, ymax = mean + std_err,
@@ -205,7 +204,7 @@ tune_3D_enet$result %>%
         group = interaction(mixture, .metric),
         color = as.factor(mixture)),
     size = 1) +
-  facet_grid( .metric ~ wflow_id, scales = "free_y") +
+  facet_grid(.metric ~ wflow_id, scales = "free_y") +
   xlab("log-penalty") + ylab("performance") + labs(color="mixture", fill="mixture") +
   scale_color_viridis_d() + scale_fill_viridis_d()
 ```
@@ -217,33 +216,33 @@ tune_3D_enet$result %>%
 
 
 ```{r}
-enet_best_roc_params <- 
-  tune_3D_enet$result %>% 
-  map_dfr(select_by_one_std_err, 
-          desc(penalty), desc(mixture), metric = 'mn_log_loss',
+enet_best_roc_params <-
+  tune_3D_enet$result %>%
+  map_dfr(select_by_one_std_err,
+          desc(penalty), desc(mixture), metric = "mn_log_loss",
           .id = "wflow_id")
 enet_best_roc_params %>% select(-starts_with("."))
 ```
 
 - For the more complex model with pairwise interaction of all continuous inputs, a higher mixing rate is preferred, indicating more Lasso to shut off features.  
-- The model with interaction from `customer` resulted better mean log loss performance. Thus will serve as best model here.    
+- The model with interaction from `customer` resulted better mean log loss performance. Thus will serve as best model here.  
 
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
 enet_best_wflow_roc <- "inter_customer_cont_enet"
-enet_best_param <- enet_best_roc_params %>% 
+enet_best_param <- enet_best_roc_params %>%
       filter(wflow_id==enet_best_wflow_roc) %>%
       select(all_of(names(enet_grid_cl)))
 
-mod_3D_enet_best_wflow <- 
-  enet_wset_cl %>% 
-  extract_workflow(enet_best_wflow_roc) %>% 
+mod_3D_enet_best_wflow <-
+  enet_wset_cl %>%
+  extract_workflow(enet_best_wflow_roc) %>%
   finalize_workflow(parameters = enet_best_param)
 mod_3D_enet_best_wflow$param <- enet_best_param
 
-mod_3D_enet_best_resample <- 
-  mod_3D_enet_best_wflow %>% 
+mod_3D_enet_best_resample <-
+  mod_3D_enet_best_wflow %>%
   fit_resamples(
     resamples = enet_folds,
     metrics = my_metrics,

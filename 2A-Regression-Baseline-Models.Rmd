@@ -30,8 +30,8 @@ sel_cat_in <- setdiff(sel_cat, "outcome")
 
 In this section, several baseline linear models are trained using `lm`.  
 
-- Models are compared based on AIC/BIC. 
-- Important features from models are discussed. 
+- Models are compared based on AIC/BIC.  
+- Important features from models are discussed.  
 
 ----
 
@@ -42,9 +42,9 @@ In this section, several baseline linear models are trained using `lm`.
   - Standardize continuous inputs  
 
 ```{r}
-df_preproc <- df %>% 
-  mutate_if(is.character,as.factor) %>% 
-  select(-c(rowid,outcome)) %>% 
+df_preproc <- df %>%
+  mutate_if(is.character,as.factor) %>%
+  select(-c(rowid,outcome)) %>%
   mutate(
     response = log(response),
     across(starts_with("x"), scale)
@@ -94,7 +94,7 @@ calc_models_ic(my_models)
 ```
 
 - `mod_2A3`: Linear additive relationship of all continuous and categorical inputs got best BIC.  
-- `mod_2A4`: Adding interaction from `region` seem to improve AIC at the cost of BIC.   
+- `mod_2A4`: Adding interaction from `region` seem to improve AIC at the cost of BIC.  
 
 ### Custom Basis Models
 
@@ -109,9 +109,9 @@ calc_models_ic(my_models)
 
 ```{r model 2Ac1}
 mod_2Ac1 <- lm(
-  response ~ . + 
-    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2) 
-    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2) 
+  response ~ . +
+    + splines::ns(xa_03,df=2) + splines::ns(xa_05,df=2) + splines::ns(xa_08,df=2)
+    + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
     + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
     + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
     + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)
@@ -134,8 +134,8 @@ mod_2Ac2 <- lm(
     + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
     + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
     + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2)
-    - xa_03 - xa_05 - xa_08 
-    - xb_03 - xb_05 - xb_08 
+    - xa_03 - xa_05 - xa_08
+    - xb_03 - xb_05 - xb_08
     - xn_03 - xn_05 - xn_08
     - xs_01 - xs_04 - xs_06
     - xw_01 - xw_02 - xw_03,
@@ -152,12 +152,12 @@ mod_2Ac3 <- lm(
     + splines::ns(xb_03,df=2) + splines::ns(xb_05,df=2) + splines::ns(xb_08,df=2)
     + splines::ns(xn_03,df=2) + splines::ns(xn_05,df=2) + splines::ns(xn_08,df=2)
     + splines::ns(xs_01,df=2) + splines::ns(xs_04,df=2) + splines::ns(xs_06,df=2)
-    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) ) 
-    - xa_03 - xa_05 - xa_08 
-    - xb_03 - xb_05 - xb_08 
+    + splines::ns(xw_01,df=2) + splines::ns(xw_02,df=2) + splines::ns(xw_03,df=2) )
+    - xa_03 - xa_05 - xa_08
+    - xb_03 - xb_05 - xb_08
     - xn_03 - xn_05 - xn_08
     - xs_01 - xs_04 - xs_06
-    - xw_01 - xw_02 - xw_03, 
+    - xw_01 - xw_02 - xw_03,
   df_preproc)
 calc_models_ic(list(mod_2Ac3))
 ```

@@ -20,9 +20,9 @@ theme_set(theme_linedraw())
 
 In section 1A I will explore the data for basic properties and distribution of the variables.  
 
-- Check data summary, missing values, range, unique values, etc for each variable. 
-- Examine distribution of individual variables. 
-- Check correlation between continuous inputs. 
+- Check data summary, missing values, range, unique values, etc for each variable.  
+- Examine distribution of individual variables.  
+- Check correlation between continuous inputs.  
 
 **Read in the data:**
 
@@ -83,15 +83,15 @@ summ_cate %>% knitr::kable(caption = "categorical variables overview")
 **Count the unique levels for each category and sort by count for each category.**
 
 ```{r}
-df_eda %>% select(sel_cat) %>% pivot_longer(everything(), names_to ="var", values_to="level") %>% 
-  count(var,level) %>% arrange(var,n) %>% 
+df_eda %>% select(sel_cat) %>% pivot_longer(everything(), names_to ="var", values_to="level") %>%
+  count(var,level) %>% arrange(var,n) %>%
   knitr::kable(caption = "categorical variables count")
 ```
 
 **Use barchart to visualize the distribution of categorical input and binary response variables.**
 
 ```{r out.width=600, fig.width=6, fig.asp=0.5, warning=FALSE}
-df_eda %>% select(sel_cat) %>% 
+df_eda %>% select(sel_cat) %>%
   pivot_longer(everything()) %>%
   ggplot() +
   geom_bar(aes(x=value, fill=value)) +
@@ -183,7 +183,7 @@ plot_grid(p)
 - Most features look normally distributed, except:
   - The `xw` that corresponds to word count data, which is lower-bounded by 0. Two of them `xw_02`, `xw_03` look quite skewed.
   - The `xs_05` looks like it also has 0 as lower bound.
-- Inputs are not uniform across the `region` category. 
+- Inputs are not uniform across the `region` category.  
 
 **Examine the distribution of the continuous response.**
 
@@ -201,7 +201,7 @@ df_eda %>% select(response) %>%
 ```{r out.width=300, fig.width=5, fig.asp=1, warning=FALSE}
 df_eda %>%
   ggplot() +
-  geom_qq(aes(sample=log_response)) 
+  geom_qq(aes(sample=log_response))
 ```
 
 
@@ -258,8 +258,8 @@ df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
 
 - There are clear correlation patterns between some input variables.
   - The sequential blue diagonal squares indicate the positive correlations between features with same feature index among the lexicon derived features `xa`,`xb` and `xn`.
-  - The many 4-cell blue-red diagonals squares indicate correlation between feature index `02`,`03` and between index `05`,`06` features for each set of inputs. 
-  - These are more obvious when reordered. 
+  - The many 4-cell blue-red diagonals squares indicate correlation between feature index `02`,`03` and between index `05`,`06` features for each set of inputs.  
+  - These are more obvious when reordered.  
 
 **Reorder the correlation plot to view the correlated terms. **
 
@@ -267,8 +267,8 @@ df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
 df_eda %>% select(all_of(sel_num)) %>% select(-response) %>%
   cor() %>%
   corrplot::corrplot(
-    type="upper", 
-    method="color", 
+    type="upper",
+    method="color",
     diag = F,
     order="hclust",
     hclust.method="ward.D2")

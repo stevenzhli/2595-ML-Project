@@ -30,9 +30,9 @@ df_eda <- df %>% mutate(
 
 This section continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between input and output.  
 
-- Covariation between an input and an output could indicate the input can be used to predict the output. 
-- Visualize the relationship between input and output to help with feature engineering. 
-- Examine if interactions could affect prediction. 
+- Covariation between an input and an output could indicate the input can be used to predict the output.  
+- Visualize the relationship between input and output to help with feature engineering.  
+- Examine if interactions could affect prediction.  
 
 ----
 
@@ -54,9 +54,9 @@ p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- There are correlations between many inputs and the `response`. 
-  - Indicate these inputs should be able to predict the `response`. 
-  - Since we'll log-transform the `response` to remove its lower bound, will examine again at log-transformed scale. 
+- There are correlations between many inputs and the `response`.  
+  - Indicate these inputs should be able to predict the `response`.  
+  - Since we'll log-transform the `response` to remove its lower bound, will examine again at log-transformed scale.  
 
 **Examine the log-transformed response with regard to every continuous input.**
 
@@ -88,20 +88,20 @@ df_eda %>%
   pivot_longer(c(region,customer), values_to="level") %>%
   ggplot(aes(x=level, y=log_response, color=level)) +
   geom_boxplot(outlier.size = 0.5) +
-  geom_beeswarm(priority="none", size=0.5, alpha=0.5) + 
+  geom_beeswarm(priority="none", size=0.5, alpha=0.5) +
   facet_grid(~name, scales="free_x", space="free_x") +
   theme_linedraw() + xlab("") + theme(legend.position="none")
 ```
 
 - It appears the categorical inputs have impact on the `response`. For example:
   - The average `response` in region `ZZ` is clearly less than that in region `XX, YY`.
-  - Customer `M` received least average time spent on sale than other customer groups. 
-  - Customer `D` received on average the most sale time. 
+  - Customer `M` received least average time spent on sale than other customer groups.  
+  - Customer `D` received on average the most sale time.  
 
 **For each region, see how `response` differ across customers. **
 
 ```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
-df_eda %>% 
+df_eda %>%
   ggplot(aes(x=customer, y=log_response, color = customer)) +
   geom_boxplot() +
   geom_beeswarm(priority="none", size=0.5, alpha=0.5) +
@@ -123,7 +123,7 @@ df_eda %>%
   facet_wrap(~customer) + xlab("")
 ```
 
-- This basically reflects how the `response` correlates to `region` in a prevoius plot. 
+- This basically reflects how the `response` correlates to `region` in a prevoius plot.  
 
 
 ### Response vs ALL Inputs
@@ -161,7 +161,7 @@ p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- Just like `region`, `customer` also affects how certain inputs could predict the `response`. 
+- Just like `region`, `customer` also affects how certain inputs could predict the `response`.  
   - Consider interact `customer` to the inputs. [feature-engineering]
 
 ----
@@ -185,7 +185,7 @@ plot_grid(p)
 
 - As shown by the smoother, some inputs have clear relation to the binary `outcome`.
   - For most inputs, low input ranges associate with higher event probability, while high input ranges correlate with lower event probability.
-  - This is not true for `xs_04`,`xs_05`,`xs_06`, and all `xw` input features, which does not seem to affect event probability too much. 
+  - This is not true for `xs_04`,`xs_05`,`xs_06`, and all `xw` input features, which does not seem to affect event probability too much.  
   
 **Examine how the response affects outcome.**
 
@@ -198,7 +198,7 @@ df_eda %>%
     facet_wrap(~name, scales="free", ncol=8) + xlab("")
 ```
 
-- The `response` does have some impact on `outcome`. 
+- The `response` does have some impact on `outcome`.  
   - Lower response associated with higher event probability.
   - Consider using `response` as predictor for `outcome`. [feature-engineering]
 
@@ -216,7 +216,7 @@ df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
 
 - It appears that `region` and `customer` does have impact on event probability. For example:
   - Customer `G` in region `XX` has highest event probability, but fairly low in region `ZZ`.
-  - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`. 
+  - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`.  
   - Consider interacting the two categorical inputs to predict `outcome`. [feature-engineering] 
 
 ### Outcome vs ALL Inputs
@@ -233,8 +233,8 @@ p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- The `region` changes how each input could predict the `outcome`. 
-  - Smoothed event probability trends for inputs `xs_04`, `xs_05`, `xs_06` and `xw` inputs seem to have different direction depending on `region`. 
+- The `region` changes how each input could predict the `outcome`.  
+  - Smoothed event probability trends for inputs `xs_04`, `xs_05`, `xs_06` and `xw` inputs seem to have different direction depending on `region`.  
   - Consider interacting `region` with inputs to predict `outcome`. [feature-engineering]
 
 
