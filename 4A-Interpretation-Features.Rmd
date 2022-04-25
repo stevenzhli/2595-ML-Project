@@ -1,0 +1,107 @@
+---
+title: "INFSCI 2595 Final Project"
+subtitle: "Part 4A, Interpretation - Features"
+author: "Zhenyu Li"
+date: '2022-04-24'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+theme_set(theme_linedraw())
+library(tidymodels)
+tidymodels_prefer()
+library(vip)
+source("./scripts/utils.R")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
+```
+
+----
+
+Tasks
+
+- Identify the best model for the regression and classification tasks
+
+- Identify the most important features/variables associated with best performing model for the regression and classification tasks
+  - Are the most important variables similar for regression and classification tasks?
+  - Does one of the sentiment derived feature types “dominate” the most important variables?
+  - Does one of the sentiment derived feature types appear to be not helpful at all?
+  - Does the formulation of the problem help with answer the questions
+    - Based on your modeling results, do you feel these sentiment derived features are helpful at predicting the outputs?
+    - Essentially, do you feel the model results are “good” and was I right about the relationship between report sentiment and the outputs?
+
+----
+
+## Best models
+
+The best model for the **regression task** was identified in part 2D4 as the XGBoost model. 
+The best model for the **classification task** was identified in part 3D4 as the Elastic Net model. 
+
+**Read in the respective best model for each task.**
+
+```{r}
+mod_rg_xgb <- readr::read_rds("./models/mod_2D_adv_best_wflow")
+mod_rg_xgb_fit <- mod_rg_xgb %>% fit(df_regr)
+
+mod_cl_enet <- readr::read_rds("./models/mod_3D_enet_best_wflow")
+mod_cl_enet_fit <- mod_cl_enet %>% fit(df_clas)
+```
+
+## Feature Importance
+
+**Plot the top 20 most important features for each model and discuss.**
+
+### Regression
+
+```{r}
+mod_rg_xgb_fit %>% 
+  extract_fit_parsnip() %>% 
+  vip(20) + 
+    ggtitle("regression: xgboost")
+```
+
+- For the regression model, since we are predicting time spent on sale, inputs that are associated with longer communications, or more extreme responses from a customer (e.g. very positive, very negative), are expected to be important to predict the sale time. 
+
+- From my regression model:
+  - As expected, one of the word count inputs `xw_01` has the highest rank in the model, and with a leading importance score than other inputs. 
+  - Other high ranked sentiment derived features are mostly from `xn_` and `xa_`, `xb_` input sets.
+  - No input from the `xs_` input set is identified as important. 
+  - The categorical input `region` appears to be an important predictor of conversation length too. 
+### Classification
+
+- For the classification model, inputs that can reflect true intention of customer to purchase, or if a customer is interested in a product or not, could be more effective in predicting the `outcome` of a sale. 
+
+```{r}
+mod_cl_enet_fit %>% 
+  extract_fit_parsnip() %>% 
+  vip(20, lambda = mod_cl_enet$param$penalty) +
+    ggtitle("classification: elastic net")
+```
+
+- From my classification model:
+  - The notable sentiment derived features are the `xn_` set of inputs, which "dominates" the highest ranks in my classification model. 
+  - Other sentiment derived inputs include mostly `xa_` and `xb_` sets. 
+  - Most `xs_` sentiment input set and the `xw_01` word count input are not in the top 20 features for the classification model. 
+
+----
+
+## Conclusions
+
+- We see the set of important features for the regression and classification tasks are **different**. Though there are some **common inputs** that appear to be important in both models. The importance of such common features are different too. These are expected because we are predicting different things that are somewhat related.   
+
+- From the discussion above, I think the formulation of the problem is mostly helpful to answer the questions. 
+  - In the classification task, many sentiment derived features are helpful in predicting product sale (`outcome`). In this case, we can say good sentiment derived features are helpful. We can also conclude that the NRC lexicon (`xn`) is great for this purpose.  
+  - In the regression task, most sentiment derived features do not play strong roles in predicting the length of sale time (`response`). Instead, the most important predictor appears to be a simple word count `xw_01`.  Thus for the regression task, the lexicon derived sentiment features are less useful than in the classification task.  
+  - The features derived from `sentimentr` appears to be least helpful in both tasks.  
+
+----

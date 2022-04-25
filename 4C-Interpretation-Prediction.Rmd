@@ -1,0 +1,73 @@
+---
+title: "INFSCI 2595 Final Project"
+subtitle: "Part 4C, Interpretation - Prediction"
+author: "Zhenyu Li"
+date: '2022-04-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+theme_set(theme_linedraw())
+library(tidymodels)
+tidymodels_prefer()
+library(vip)
+source("./scripts/utils.R")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+df_regr <- df %>% select(-c(rowid,outcome)) # remove unused columns
+df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
+```
+
+----
+
+Tasks
+
+- You must visualize the trends associated with the hardest to predict customer with respect to the most important sentiment derived feature.
+  - Free to select whether you wish to visualize the regression model trends (transformed response) or the classification model trends (event probability).
+  - Predictions should be made using the best performing model.
+- You must visualize your predictive trends using the following style:
+  - The primary input should be used as the x-aesthetic in a graphic.
+  - The secondary input should be used as a facet variable – it is recommended to use 4 to 6 unique values if your secondary input is a continuous variable.
+  - You must decide what values to use for the remaining inputs.
+
+- What conclusions can you draw from the predictive trends?
+
+----
+
+## Predict Unpredictable Customer
+
+**Read in the respective best model for each task.**
+
+```{r}
+mod_rg_xgb <- readr::read_rds("./models/mod_2D_adv_best_wflow")
+mod_cl_enet <- readr::read_rds("./models/mod_3D_enet_best_wflow")
+```
+
+----
+
+## Regression
+
+For my best regression model, the most important feature is the `xw_01`. 
+
+```{r}
+
+```
+
+----
+
+## Classification
+
+For my best classification model, the top 2 most important features are `xn_01`, `xn_03`. 
+
+
+
+----
+
