@@ -1,0 +1,218 @@
+---
+title: "INFSCI 2595 Final Project"
+subtitle: "Part 3A, Classification - Baseline Models"
+author: "Zhenyu Li"
+date: '2022-04-22'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(coefplot)
+source("./scripts/utils.R")
+theme_set(theme_linedraw())
+```
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_num_in <- setdiff(sel_num, "response")
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+sel_cat_in <- setdiff(sel_cat, "outcome")
+```
+
+----
+
+In this section, several baseline linear models are trained using `glm`.  
+
+- Models are compared based on AIC/BIC. 
+- Important features from models are discussed. 
+
+----
+
+## Preprocessing
+
+- For classification, the necessary preprocessing steps include:   
+  - Normalize the continuous inputs  
+
+```{r}
+df_prep_cl <- df %>% 
+  mutate_if(is.character,as.factor) %>% 
+  select(-c(rowid,response)) %>% 
+  mutate(
+    across(starts_with("x"), scale)
+  )
+```
+
+
+## Model Fitting
+
+**Create generalized linear models to fit the data.** 
+
+### Predefined Models
+
+**Fit 6 predefined generalized linear models.**
+
+1. Categorical variables only – linear additive  
+2. Continuous variables only – linear additive  
+3. All categorical and continuous variables – linear additive  
+4. Interact `region` with continuous inputs, do not include `customer`  
+5. Interact `customer` with continuous inputs, do not include `region`  
+6. All pairwise interactions of continuous inputs, do not include categorical inputs  
+
+Slice the data with certain inputs to facilitate model building.  
+
+```{r}
+df_cat <- df_prep_cl %>% select(-all_of(sel_num_in))
+df_num <- df_prep_cl %>% select(-all_of(sel_cat_in))
+```
+
+Fit models by providing formula.  
+
+```{r}
+# fit the predefined models
+mod_3A1 <- glm(outcome ~ ., binomial, df_cat)
+mod_3A2 <- glm(outcome ~ ., binomial, df_num)
+mod_3A3 <- glm(outcome ~ ., binomial, df_prep_cl)
+mod_3A4 <- glm(outcome ~ (region) * (. -customer), binomial, df_prep_cl)
+mod_3A5 <- glm(outcome ~ (customer) * (. -region), binomial, df_prep_cl)
+mod_3A6 <- glm(outcome ~ (.)^2, binomial, df_num)
+```
+
+- When the feature space is large (`mod_3A5`, `mod_3A6`), we see some models caused warning.  
+  - This could be caused by overfitting. 
+
+Get a quick comparison of models using information criterion.  
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_3A\\d+"))
+calc_models_ic(my_models, logistic = T)
+```
+
+- `mod_3A2`: Linear additive relationship of only continuous inputs got best BIC.  
+- `mod_3A3`: Linear additive relationship of all continuous and categorical inputs got best AIC.  
+
+### Custom Basis Models
+
+**Fit 4 custom basis models.**
+
+- From EDA, identify inputs that cause distinction of `region` by outcome event probability
+  - `xs` index `03, 04, 05, 06`
+  - `xw` index `01, 02, 03`
+
+**1. Interact `region` with these inputs, keep linear additive for the rest.** 
+
+```{r model 3Ac1}
+mod_3Ac1 <- glm(
+  outcome ~ . + region : (
+   + xs_03 + xs_04 + xs_05 + xs_06
+   + xw_01 + xw_02 + xw_03 ),
+  binomial, data=df_prep_cl)
+calc_models_ic(list(mod_3Ac1), T)
+```
+
+**2. Interact these inputs, keep the rest linear additive. **
+
+```{r model 3Ac2}
+mod_3Ac2 <- glm(
+  outcome ~ . + 
+   ( xs_03 + xs_04 + xs_05 + xs_06) :
+   ( xw_01 + xw_02 + xw_03 ),
+  binomial, data=df_prep_cl)
+calc_models_ic(list(mod_3Ac2), T)
+```
+
+**3. Interact `customer` to these inputs, keep the rest linear additive. **  
+
+```{r model 3Ac3}
+mod_3Ac3 <- glm(
+  outcome ~ . + customer : (
+   + xs_03 + xs_04 + xs_05 + xs_06
+   + xw_01 + xw_02 + xw_03 ),
+  binomial, data=df_prep_cl)
+calc_models_ic(list(mod_3Ac3), T)
+```
+
+**4. Use pair-wise interaction for all inputs.**  
+
+```{r model 3Ac4}
+mod_3Ac4 <- glm(
+  outcome ~ (.)^2, 
+  binomial, df_prep_cl)
+calc_models_ic(list(mod_3Ac4), T)
+```
+
+**Save the models to file.**  
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_3A"))
+save_models(my_models)
+```
+
+----
+
+## Conclusions
+
+```{r}
+mod_3A1 <- readr::read_rds("models/mod_3A1")
+mod_3A2 <- readr::read_rds("models/mod_3A2")
+mod_3A3 <- readr::read_rds("models/mod_3A3")
+mod_3A4 <- readr::read_rds("models/mod_3A4")
+mod_3A5 <- readr::read_rds("models/mod_3A5")
+mod_3A6 <- readr::read_rds("models/mod_3A6")
+mod_3Ac1 <- readr::read_rds("models/mod_3Ac1")
+mod_3Ac2 <- readr::read_rds("models/mod_3Ac2")
+mod_3Ac3 <- readr::read_rds("models/mod_3Ac3")
+mod_3Ac4 <- readr::read_rds("models/mod_3Ac4")
+```
+
+### Model Comparison
+
+**Print out the model metrics.**  
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_3A"))
+calc_models_ic(my_models, T) %>% knitr::kable()
+```
+
+- I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
+- None of the custom basis models was able to drive down BIC, and only one `mod_3Ac2` barely made the AIC lower. 
+
+- Best models
+  - Based on the BIC, select `mod_3A2`.
+  - Based on balance of the two, select `mod_3A3`
+  - Based on the AIC, select `mod_3Ac2`.  
+
+### Coefficient Plot
+
+**Visualize the coefficient summaries for the top 3 models.**  
+
+```{r out.width=500, fig.width=5, fig.asp=1}
+coefplot(mod_3A2)
+coefplot(mod_3A3)
+coefplot(mod_3Ac2)
+```
+
+- Each model contains some significant coefficients, but it looks like majority of them are non-significant.
+- The uncertainty for the coefficients are larger than the regression models.    
+
+
+### Important Features
+
+- Filter each model for significant coefficients (uncertainty interval do not span 0). Then rank by their estimated coefficients in descending order.  
+  - Those with higher coefficients indicate more impact on the response since the inputs are standardized.   
+
+```{r}
+pull_lm_coefs_signif(mod_3A2) %>% knitr::kable()
+pull_lm_coefs_signif(mod_3A3) %>% knitr::kable()
+pull_lm_coefs_signif(mod_3Ac2) %>% knitr::kable()
+```
+
+- For continuous inputs, potential important ones are `xw_03`, `xn_03`, `xn_07`, `xn_08`, `xa_05`.  
+- For categorical inputs, it appears `customer` is critical in determining the outcome. 
+
+----

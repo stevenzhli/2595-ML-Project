@@ -1,0 +1,167 @@
+---
+title: "INFSCI 2595 Final Project"
+subtitle: "Part 3B, Classification - Bayesian Analysis"
+author: "Zhenyu Li"
+date: '2022-04-22'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+theme_set(theme_linedraw())
+library(rstanarm)
+options(mc.cores = parallel::detectCores())
+library(corrplot)
+source("./scripts/utils.R")
+```
+
+```{r message=FALSE, warning=FALSE}
+df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
+sel_num <- df %>% select_if(is_double) %>% select(!rowid) %>% select(sort(names(.))) %>% colnames()
+sel_num_in <- setdiff(sel_num, "response")
+sel_cat <- df %>% select(!one_of(sel_num)) %>% select(!rowid) %>% colnames()
+sel_cat_in <- setdiff(sel_cat, "outcome")
+```
+
+----
+
+In this section, I will use Bayesian approach to evaluate 3 baseline logistic models with relatively good performance from section 3A.  
+
+----
+
+## Preprocessing
+
+- For classification, the necessary preprocessing steps include:   
+  - Normalize the continuous inputs
+
+```{r}
+df_prep_cl <- df %>% 
+  mutate_if(is.character,as.factor) %>% 
+  select(-c(rowid,response)) %>% 
+  mutate(
+    across(starts_with("x"), scale)
+  )
+```
+
+## Bayesian Model Fitting
+
+**Select 3 models from 3A for Bayesian model fitting.** 
+
+- Based on the best BIC, select `mod_3A2`. This is also the simplest model among these three.  
+- Based on balance of the two, select `mod_3A3`. This model adds categorical inputs.  
+- Based on the best AIC, select `mod_3Ac2`.  
+- I will use weak prior of R-squared 0.5. 
+
+```{r}
+mod_3A2 <- readr::read_rds("models/mod_3A2")
+mod_3A3 <- readr::read_rds("models/mod_3A3")
+mod_3Ac2 <- readr::read_rds("models/mod_3Ac2")
+```
+
+**1. Based on model `mod_3A2`, linear additive of continuous inputs only.**
+
+```{r model 3B1_3A2}
+mod_3B1_3A2 <- stan_glm(
+  mod_3A2$call$formula,
+  data = df_prep_cl %>% select(-all_of(sel_cat_in)),
+  family = binomial,
+  seed = 1324
+)
+```
+
+**2. Based on model `mod_3A3`, linear additive of all inputs.**
+
+```{r model 3B2_3A3}
+mod_3B2_3A3 <- stan_glm(
+  mod_3A3$call$formula,
+  data = df_prep_cl,
+  family = binomial,
+  seed = 1324
+)
+```
+
+
+**3. Based on model `mod_3Ac2` where some inputs are interacted. **
+
+```{r model 3B3_3Ac2}
+mod_3B3_3Ac2 <- stan_glm(
+  mod_3Ac2$call$formula,
+  data = df_prep_cl,
+  family = binomial,
+  seed = 1324
+)
+```
+
+**Save the 3 models to file.**  
+
+```{r}
+my_models <- mget(ls(pattern = "^mod_3B"))
+save_models(my_models)
+```
+
+## Conclusions
+
+```{r}
+mod_3B1_3A2 <- readr::read_rds("models/mod_3B1_3A2")
+mod_3B2_3A3 <- readr::read_rds("models/mod_3B2_3A3")
+mod_3B3_3Ac2 <- readr::read_rds("models/mod_3B3_3Ac2")
+```
+
+### Model Comparison
+
+**Compare models based on information criterion.**  
+
+```{r}
+mod_3B1_3A2$waic <- waic(mod_3B1_3A2)
+mod_3B2_3A3$waic <- waic(mod_3B2_3A3)
+mod_3B3_3Ac2$waic <- waic(mod_3B3_3Ac2)
+```
+
+```{r}
+my_models <- stanreg_list(
+  mod_3B1_3A2, mod_3B2_3A3, mod_3B3_3Ac2,
+  model_names = c("3B1_3A2, all continuous","3B2_3A3, all inputs","3B3_3Ac2, interactions"))
+loo_compare(my_models, criterion = "waic")
+```
+
+- Based on WAIC, the three models really do not have much performance differences.  
+- Thus the simplest model, 3B1_3A2, where only have the continuous inputs linear added, should be picked as the best model. 
+
+### Best Model
+
+**Analyze the posterior behavior of the best model.**  
+
+#### Coefficients
+
+**Visualize posterior regression coefficient plot. **
+
+```{r Uncertainty, out.width=400, fig.width=4, fig.asp=1}
+plot(mod_3B1_3A2, pars = names(mod_3B1_3A2$coefficients)) +
+  geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 0.5) +
+  geom_point(
+    data = as_tibble(coef(mod_3A2), rownames="coef"), aes(x = value, y = coef),
+    shape = 5,
+    size = 3,
+    color = "purple"
+    )
+```
+
+- The MLE estimated coefficients are plotted using purple diamonds. We see the default priors used slightly constrained the coefficients.  
+
+
+**Check the correlation of the posterior coefficients.**  
+
+```{r Correlations, out.width=500, fig.width=5, fig.asp=1, warning=FALSE}
+mod_3B1_3A2 %>% as_tibble() %>% 
+  select(all_of(names(mod_3B1_3A2$coefficients))) %>% 
+  cor() %>% corrplot(method="color", type="upper")
+```
+
+- The correlation of coefficients are from the correlation of corresponding input terms as in EDA. 
+
+
+----
