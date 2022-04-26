@@ -28,10 +28,10 @@ df_eda <- df %>% mutate(
 
 ----
 
-This section continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between input and output.  
+This section continues the EDA process. In part 1A we explored the data distribution of the dataset. Here in 1B we will explore the covariation between inputs and output.  
 
 - Covariation between an input and an output could indicate the input can be used to predict the output.  
-- Visualize the relationship between input and output to help with feature engineering.  
+- Visualize the relationship between input and output variables to help with feature engineering.  
 - Examine if interactions could affect prediction.  
 
 ----
@@ -40,7 +40,7 @@ This section continues the EDA process. In part 1A we explored the data distribu
 
 ### Response vs Continuous Input
 
-**Examine the response with regard to every continuous input.**
+**Examine the response with regard to every continuous input.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -55,10 +55,10 @@ plot_grid(p)
 ```
 
 - There are correlations between many inputs and the `response`.  
-  - Indicate these inputs should be able to predict the `response`.  
-  - Since we'll log-transform the `response` to remove its lower bound, will examine again at log-transformed scale.  
+  - Indicate these inputs could be used to predict the `response`.  
+  - Since we'll log-transform the `response` to remove lower bound for modelling, will examine again at log-transformed scale.  
 
-**Examine the log-transformed response with regard to every continuous input.**
+**Examine the log-transformed response with regard to every continuous input.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -81,7 +81,7 @@ plot_grid(p)
 
 ### Response vs Categorical Input
 
-**Check how each category level correlates with the log-transformed response.**
+**Check how each category level correlates with the log-transformed response.**  
 
 ```{r out.width=600, fig.width=6, fig.asp=0.50, warning=FALSE}
 df_eda %>%
@@ -93,12 +93,10 @@ df_eda %>%
   theme_linedraw() + xlab("") + theme(legend.position="none")
 ```
 
-- It appears the categorical inputs have impact on the `response`. For example:
-  - The average `response` in region `ZZ` is clearly less than that in region `XX, YY`.
-  - Customer `M` received least average time spent on sale than other customer groups.  
-  - Customer `D` received on average the most sale time.  
+- It appears the categorical inputs have impact on the `response`.
+  - The distribution across `region` have similar structure, the difference is the mean reponse time. Consider adding `region` additively. [feature-engineering]
 
-**For each region, see how `response` differ across customers. **
+**For each region, check how `response` differ across customers.**  
 
 ```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
 df_eda %>%
@@ -108,12 +106,12 @@ df_eda %>%
   facet_wrap(~region) + xlab("")
 ```
 
-- At each region, `response` differs by `customer`. For example:
+- At each region, `response` differs by `customer`.
   - On average the least response for customers `Other` in `ZZ` region.
   - On average the most response is on customer `D` in `XX` region.
-  - Consider interacting the two categorical inputs. [feature-engineering] 
+  - Consider interacting the two categorical inputs but some customers are absent in a region, which could cause issue. [feature-engineering]
 
-**For each customer, check if `response` differ by regions. **
+**For each customer, check if `response` differ by regions.**  
 
 ```{r out.width=800, fig.width=8, fig.asp=0.60, warning=FALSE}
 df_eda %>%
@@ -123,12 +121,12 @@ df_eda %>%
   facet_wrap(~customer) + xlab("")
 ```
 
-- This basically reflects how the `response` correlates to `region` in a prevoius plot.  
+- This basically reflects how the `response` correlates to `region` in the prevoius plot.  
 
 
 ### Response vs ALL Inputs
 
-**Log-transformed response from each continuous input, conditioned on region. **
+**Plot log-transformed response for each continuous input, conditioned on the region.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -142,12 +140,12 @@ p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- Region does have affect the relationship between certain inputs and the `response`. For example
-  - The `region` totally changes the direction of the correlation between inputs `xa_04`, `xa_05`, `xa_08`, `xs_01`, `xs_02` and `response`.
-    - This suggests that at different `region`, the same input feature could have contrasting effect on `response`. [interpretation]
-  - Consider interact `region` to the inputs. [feature-engineering]
+- The `region` variable affects the relationship between certain inputs and the `response`.
+  - It totally changes the direction of the correlation between inputs `xa_04`, `xa_05`, `xa_08`, `xs_01`, `xs_02` and `response`.
+  - This suggests that at different `region`, the same inputs could have contrasting effect on `response`. [interpretation]
+  - Consider interacting `region` to the inputs. [feature-engineering]
 
-**Log-transformed response from each continuous input, conditioned on customer. **
+**Plot log-transformed response from each continuous input, conditioned on customer.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -161,8 +159,8 @@ p <- df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- Just like `region`, `customer` also affects how certain inputs could predict the `response`.  
-  - Consider interact `customer` to the inputs. [feature-engineering]
+- Just like `region`, the `customer` variable also affects how certain inputs could predict the `response`.
+  - Consider interacting `customer` to the inputs. [feature-engineering]
 
 ----
 
@@ -170,7 +168,7 @@ plot_grid(p)
 
 ### Outcome vs Continuous Input
 
-**Check how the binary outcome is affected by the continuous inputs.**
+**Check how the binary outcome is affected by the continuous inputs.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -184,10 +182,10 @@ plot_grid(p)
 ```
 
 - As shown by the smoother, some inputs have clear relation to the binary `outcome`.
-  - For most inputs, low input ranges associate with higher event probability, while high input ranges correlate with lower event probability.
-  - This is not true for `xs_04`,`xs_05`,`xs_06`, and all `xw` input features, which does not seem to affect event probability too much.  
-  
-**Examine how the response affects outcome.**
+  - For most inputs, low input values are associate with higher event probability.  
+  - This is not true for `xs_04`,`xs_05`,`xs_06`, and all `xw` input features, which does not seem to affect event probability too much. [interpretation]
+
+**Examine how the response affects outcome.**  
 
 ```{r out.width=600, fig.width=6, fig.asp=0.40, warning=FALSE}
 df_eda %>%
@@ -198,13 +196,13 @@ df_eda %>%
     facet_wrap(~name, scales="free", ncol=8) + xlab("")
 ```
 
-- The `response` does have some impact on `outcome`.  
+- The `response` does have some impact on the `outcome`.  
   - Lower response associated with higher event probability.
-  - Consider using `response` as predictor for `outcome`. [feature-engineering]
+  - Consider using `response` as predictor for `outcome`? [feature-engineering]
 
 ### Outcome vs Categorical Input
 
-**Check how the event probability is related to the customer in each region.**
+**Check how the event probability is related to the customer in each region.**  
 
 ```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
 df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
@@ -214,14 +212,14 @@ df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
   facet_wrap(~region)
 ```
 
-- It appears that `region` and `customer` does have impact on event probability. For example:
+- It appears that `region` and `customer` does have impact on event probability.
   - Customer `G` in region `XX` has highest event probability, but fairly low in region `ZZ`.
-  - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`.  
-  - Consider interacting the two categorical inputs to predict `outcome`. [feature-engineering] 
+  - Customer `E` has almost zero event probability in region `YY`, but has some in region `XX`.
+  - Consider interacting the two categorical inputs. [feature-engineering]
 
 ### Outcome vs ALL Inputs
 
-**Examine outcome based on continuous input, conditioned on `region`.**
+**Examine outcome based on continuous input, conditioned on region.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -233,12 +231,11 @@ p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- The `region` changes how each input could predict the `outcome`.  
+- The `region` affects how some continuous inputs could predict the `outcome`.  
   - Smoothed event probability trends for inputs `xs_04`, `xs_05`, `xs_06` and `xw` inputs seem to have different direction depending on `region`.  
   - Consider interacting `region` with inputs to predict `outcome`. [feature-engineering]
 
-
-**Examine outcome based on continuous input, conditioned on `customer`.**
+**Examine outcome based on continuous input, conditioned on customer.**  
 
 ```{r out.width=1200, fig.width=12, fig.asp=0.65, warning=FALSE}
 p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
@@ -252,7 +249,7 @@ p = df_eda %>% add_column(xs_98=NA, xs_99=NA) %>%
 plot_grid(p)
 ```
 
-- Similarly, the `customer` does affect how an input could predict event probability.
+- Similarly, the `customer` variable affects how some continuous input predict event probability.
   - Consider interacting `customer` with inputs to predict `outcome`. [feature-engineering]
 
 ----

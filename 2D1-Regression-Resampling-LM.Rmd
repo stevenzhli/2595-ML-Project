@@ -30,6 +30,8 @@ Train the 2 predefined linear models and 3 custom basis linear models selected f
 
 **Create the blueprints for data preprocessing & feature engineering.**  
 
+**The preprocessing steps.**  
+
 ```{r preprocess}
 bp_prep <- recipe(response ~ ., data=df_regr) %>%
   step_normalize(all_numeric_predictors())
@@ -38,15 +40,15 @@ bp_prep <- recipe(response ~ ., data=df_regr) %>%
 
 ### Predefined models
 
-- `2D1`: All categorical and continuous inputs - linear additive features.
+**`2D1`: All categorical and continuous inputs - linear additive features.**  
 
 ```{r mod_2D1}
 bp_2D1 <- bp_prep %>%
   step_dummy(all_nominal_predictors())
 ```
 
-- `2D2`: All pairwise interactions of continuous inputs, include additive categorical features.
-  
+**`2D2`: All pairwise interactions of continuous inputs, include additive categorical features.**  
+
 ```{r mod_2D2}
 bp_2D2 <- bp_prep %>%
   step_interact(~ all_numeric_predictors():all_numeric_predictors(), sep = ":") %>%
@@ -55,8 +57,7 @@ bp_2D2 <- bp_prep %>%
 
 ### Custom models
 
-- Import previous models that are referenced here.
-- Get input names that need nonlinear features together.
+Import the earlier models that are referenced. Pool the inputs that need to create nonlinear features on.
 
 ```{r}
 mod_2Ac1 <- readr::read_rds("./models/mod_2Ac1")
@@ -71,7 +72,7 @@ nonlin_pred <- c("xa_03","xa_05","xa_08",
 ```
 
 
-- `2D3_2Ac1`: Linear additive of the nonlinear features and the rest.  
+**`2D3_2Ac1`: Linear additive of the nonlinear features and the rest.**  
 
 ```{r mod_2D3}
 bp_2D3_2Ac1 <- bp_prep %>%
@@ -83,7 +84,7 @@ bp_2D3_2Ac1 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% nco
 coef(mod_2Ac1) %>% length()
 ```
 
-- `2D4_2Ac3`: Interact `region` with only the nonlinear features, additive for the rest.
+**`2D4_2Ac3`: Interact `region` with only the nonlinear features, additive for the rest.**  
 
 ```{r mod_2D4}
 bp_2D4_2Ac3 <- bp_prep %>%
@@ -100,7 +101,7 @@ bp_2D4_2Ac3 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% nco
 coef(mod_2Ac3) %>% length()
 ```
 
-- `2D5_2Ac4`: All pairwise interactions for all input variables.  
+**`2D5_2Ac4`: All pairwise interactions for all input variables.**  
 
 ```{r mod_2D5}
 bp_2D5_2Ac4 <- bp_prep %>%
@@ -109,7 +110,7 @@ bp_2D5_2Ac4 <- bp_prep %>%
   step_interact(~ starts_with("region"):matches("^x.{1}_\\d+$"), sep=":") %>%
   step_interact(~ starts_with("customer"):matches("^x.{1}_\\d+$"), sep=":") %>%
   step_interact(~ matches("^region_.{2}$"):matches("^customer_.{1,6}$"), sep=":")
-  
+
 # check # of features with corresponding model (+response -intercept)
 bp_2D5_2Ac4 %>% prep(training=df_regr, retain=T) %>% bake(new_data=NULL) %>% ncol()
 coef(mod_2Ac4) %>% length()
@@ -121,7 +122,7 @@ coef(mod_2Ac4) %>% length()
 
 ### Setup
 
-**Define the resampling scheme.**
+**Define the resampling scheme.**  
 
 - Use 5 fold cross-validation with 5 repeats for resampling.
 - Will compare RMSE, MAE and R-Squared metrics.
@@ -177,9 +178,9 @@ tune_2D_lm <- readr::read_rds("./models/tune_2D_lm")
 
 ### Performance
 
-**Visualize and compare performances across 5 linear models.**
+**Visualize and compare performances across 5 linear models.**  
 
-- Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale.  
+Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale.  
 
 ```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
 tune_2D_lm %>% collect_metrics() %>%
@@ -192,7 +193,7 @@ tune_2D_lm %>% collect_metrics() %>%
   labs(color="model")
 ```
 
-- Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
+Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
 
 ```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
 tune_2D_lm %>% collect_metrics() %>%
@@ -211,7 +212,7 @@ tune_2D_lm %>% collect_metrics() %>%
 
 ### Best Model
 
-**Retrain the best model with resampling, and save predictions.**
+**Retrain the best model with resampling, and save predictions.**  
 
 ```{r}
 lm_best_wflow_mae <- "nonlin_additive_lm"

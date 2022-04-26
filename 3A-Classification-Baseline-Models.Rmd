@@ -48,6 +48,7 @@ df_prep_cl <- df %>%
   )
 ```
 
+----
 
 ## Model Fitting
 
@@ -55,7 +56,7 @@ df_prep_cl <- df %>%
 
 ### Predefined Models
 
-**Fit 6 predefined generalized linear models.**
+**Fit 6 predefined generalized linear models.**  
 
 1. Categorical variables only – linear additive  
 2. Continuous variables only – linear additive  
@@ -83,8 +84,9 @@ mod_3A5 <- glm(outcome ~ (customer) * (. -region), binomial, df_prep_cl)
 mod_3A6 <- glm(outcome ~ (.)^2, binomial, df_num)
 ```
 
-- When the feature space is large (`mod_3A5`, `mod_3A6`), we see some models caused warning.  
-  - This could be caused by overfitting.  
+- When the feature space is large (`mod_3A5`, `mod_3A6`), we see some models result linear separability.   
+  - This is likely because of the expanded features.  
+  - Worth consider applying regularization to constrain the coefficients.  
 
 Get a quick comparison of models using information criterion.  
 
@@ -98,7 +100,7 @@ calc_models_ic(my_models, logistic = T)
 
 ### Custom Basis Models
 
-**Fit 4 custom basis models.**
+**Fit 4 custom basis models.**  
 
 - From EDA, identify inputs that cause distinction of `region` by outcome event probability
   - `xs` index `03, 04, 05, 06`
@@ -115,7 +117,7 @@ mod_3Ac1 <- glm(
 calc_models_ic(list(mod_3Ac1), T)
 ```
 
-**2. Interact these inputs, keep the rest linear additive. **
+**2. Interact these inputs, keep the rest linear additive.**  
 
 ```{r model 3Ac2}
 mod_3Ac2 <- glm(
@@ -126,7 +128,7 @@ mod_3Ac2 <- glm(
 calc_models_ic(list(mod_3Ac2), T)
 ```
 
-**3. Interact `customer` to these inputs, keep the rest linear additive. **  
+**3. Interact `customer` to these inputs, keep the rest linear additive.**  
 
 ```{r model 3Ac3}
 mod_3Ac3 <- glm(
@@ -182,7 +184,7 @@ calc_models_ic(my_models, T) %>% knitr::kable()
 - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
 - None of the custom basis models was able to drive down BIC, and only one `mod_3Ac2` barely made the AIC lower.  
 
-- Best models
+- Best models selected:
   - Based on the BIC, select `mod_3A2`.
   - Based on balance of the two, select `mod_3A3`
   - Based on the AIC, select `mod_3Ac2`.  
@@ -213,6 +215,6 @@ pull_lm_coefs_signif(mod_3Ac2) %>% knitr::kable()
 ```
 
 - For continuous inputs, potential important ones are `xw_03`, `xn_03`, `xn_07`, `xn_08`, `xa_05`.  
-- For categorical inputs, it appears `customer` is critical in determining the outcome.  
+- For categorical inputs, it appears `customer` is critical in determining the `outcome`.  
 
 ----

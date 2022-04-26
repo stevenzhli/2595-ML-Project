@@ -23,6 +23,8 @@ df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
 ```
 
+----
+
 ## Advanced Models
 
 Train the following advanced models for the regression.
@@ -35,7 +37,7 @@ Train the following advanced models for the regression.
 
 ### Models
 
-**The preprocessing steps.**
+**The preprocessing steps.**  
 
 ```{r}
 bp_2D_dummy <- recipe(response ~ ., data=df_regr) %>%
@@ -44,7 +46,7 @@ bp_2D_norm <- bp_2D_dummy %>%
   step_normalize(all_numeric_predictors())
 ```
 
-**Model specifications.**
+**Model specifications.**  
   
 ```{r}
 nnet_spec <-
@@ -101,18 +103,20 @@ adv_wset_no_preproc <-
   )
 ```
 
-**Combine the workflows into one for training. **  
+**Combine the workflows into one for training.**  
 
 ```{r}
 adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>%
   mutate(wflow_id = gsub("(recipe_)","",wflow_id))
 ```
 
+----
+
 ## Training
 
 ### Setup
 
-**Allow parallel processing.**  
+Allow parallel processing.  
 
 ```{r message=FALSE, warning=FALSE}
 if (parallel::detectCores(logical=FALSE) > 3) {
@@ -123,11 +127,11 @@ if (parallel::detectCores(logical=FALSE) > 3) {
 }
 ```
 
-**Resampling setup.**
+**Resampling setup.**  
 
 ```{r resampling}
-set.seed(2356)
-adv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
+set.seed(2543)
+cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
 
@@ -139,7 +143,7 @@ my_metrics <- metric_set(rmse, mae, rsq)
 tune_2D_adv <- adv_wset_all %>%
   workflow_map(
     fn = "tune_grid",
-    resamples = adv_folds,
+    resamples = cv_folds,
     metrics = my_metrics,
     grid = 10,
     control = control_grid(
@@ -165,13 +169,13 @@ tune_2D_adv <- readr::read_rds("./models/tune_2D_adv")
 
 ### Performance
 
-**Print out the value of model metrics for quick comparison. **  
+**Print out the value of model metrics for quick comparison.**  
 
 ```{r}
 tune_2D_adv %>% rank_results(rank_metric = "mae", select_best = T)
 ```
 
-**Visualize the model performance metrics across the models tuned with the best tuning parameters for each.**  
+**Visualize the performance metrics across the models tuned, selecting best performance tuning parameters for each.**  
 
 ```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 names(tune_2D_adv$result) <- tune_2D_adv$wflow_id
@@ -186,8 +190,7 @@ tune_2D_adv %>%
   theme(legend.position = "none")
 ```
 
-- Judging from the visualization, XGB method has best performance for all three metrics.  
-  
+- Judging from the visualization, the best of XGB model has the best performance for all three metrics compared to the best of all other models.  
 
 ### Best Model
 
@@ -215,12 +218,11 @@ mod_2D_adv_best_wflow <-
 mod_2D_adv_best_resample <-
   mod_2D_adv_best_wflow %>%
   fit_resamples(
-    resamples = adv_folds,
+    resamples = cv_folds,
     metrics = my_metrics,
     control = control_resamples(save_pred = T)
   )
 ```
-
 
 ```{r}
 save_models(mget(ls(pattern = "^mod_2D_adv")))

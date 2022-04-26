@@ -18,15 +18,17 @@ tidymodels_prefer()
 source("./scripts/utils.R")
 ```
 
+----
+
 ## Regression: Best Model
 
-Compare and choose the best model from: 
+Compare and choose the best model for the regression task from:  
 
 - Best baseline linear model
-- Best Elastic Net model
+- Best regularized Elastic Net model
 - Best advanced model
 
-**Read in the 3 best models from part 2D1 - 2D3. **
+**Read in the 3 best models from part 2D1 - 2D3.**  
 
 ```{r message=FALSE, warning=FALSE}
 mod_2D_lm_best_resample <- readr::read_rds("./models/mod_2D_lm_best_resample")
@@ -35,7 +37,7 @@ mod_2D_adv_best_resample <- readr::read_rds("./models/mod_2D_adv_best_resample")
 my_models <- mget(ls(pattern = "^mod_2D.+_resample"))
 ```
 
-**Compare model parameters. **
+**Compare model parameters.**  
 
 ```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 my_models %>%
@@ -47,8 +49,10 @@ my_models %>%
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
-- The best model (XGB) from the set of advanced models has the overall best performance among all models trained.
-- The worst performance is from the best model fit from manually constructed baseline linear models.  
+- For all three metrics, the best model from the Elastic Net (green) has the best performance. 
+- The worst performance is from the best linear model fit from manually crafted features (blue).  
+- The best model from the advanced models (XGBoost, red) has intermediate performances.  
+- Thus the best model for regression task is determined to be the Elastic Net model. 
 
 **Visualize predicted vs observed.**  
 
@@ -57,11 +61,14 @@ my_models %>%
   map_dfr(collect_predictions, .id="model") %>%
   ggplot(aes(x=response, y=.pred)) +
   geom_abline(color = "grey50", lty = 2) +
-  geom_point(alpha = 0.1, size = 0.25) +
+  geom_point(alpha = 0.2, size = 0.25) +
   facet_wrap(~ model) +
   coord_obs_pred() +
   labs(x = "observed", y = "predicted")
 ```
+
+- From left to right are the XGBoost, the Elastic Net, and the baseline linear model.  
+- We see the middle one (Elastic Net) the predicted and observed are more closely correlated.    
 
 ----
 

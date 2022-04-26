@@ -49,7 +49,9 @@ In this section, I will visualize how the generalized linear models predict the 
 - One with some interactions of the inputs `mod_3B3_3Ac2`.  
 
 ```{r}
+mod_3A3 <- readr::read_rds("models/mod_3A3")
 mod_3B2_3A3 <- readr::read_rds("models/mod_3B2_3A3")
+mod_3Ac2 <- readr::read_rds("models/mod_3Ac2")
 mod_3B3_3Ac2 <- readr::read_rds("models/mod_3B3_3Ac2")
 ```
 
@@ -81,7 +83,7 @@ mod_3B3_3Ac2 %>% as_tibble() %>%
   geom_vline(xintercept = 0,linetype="dashed")
 ```
 
-**Choose predictors to use based on both models. **  
+**Choose predictors to use based on both models.**  
 
 - Selection criterion
   1. Since continuous inputs are normalized, the greater magnitude of the estimated coefficient indicates more impact from this input to the `response`.

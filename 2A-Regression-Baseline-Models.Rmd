@@ -31,7 +31,7 @@ sel_cat_in <- setdiff(sel_cat, "outcome")
 In this section, several baseline linear models are trained using `lm`.  
 
 - Models are compared based on AIC/BIC.  
-- Important features from models are discussed.  
+- Important features from the best models are discussed.  
 
 ----
 
@@ -51,14 +51,15 @@ df_preproc <- df %>%
   )
 ```
 
+----
 
 ## Model Fitting
 
-**Create linear models to fit the data.** 
+**Create linear models to fit the data.**  
 
 ### Predefined Models
 
-**Fit 6 predefined linear models.**
+**Fit 6 predefined linear models.**  
 
 1. Categorical variables only – linear additive  
 2. Continuous variables only – linear additive  
@@ -93,12 +94,12 @@ my_models <- mget(ls(pattern = "^mod_2A\\d+"))
 calc_models_ic(my_models)
 ```
 
-- `mod_2A3`: Linear additive relationship of all continuous and categorical inputs got best BIC.  
-- `mod_2A4`: Adding interaction from `region` seem to improve AIC at the cost of BIC.  
+- `mod_2A3`: Linear additive relationship of all continuous and categorical inputs has the best BIC.  
+- `mod_2A4`: Adding interaction from `region` seems to improve AIC at the cost of BIC.  
 
 ### Custom Basis Models
 
-**Fit 4 custom basis models.**
+**Fit 4 custom basis models.**  
 
 - Input features that involve some non-linearity from EDA are
   - `xa, xb, xn` at index `03, 05, 08`
@@ -124,7 +125,7 @@ mod_2Ac1 <- lm(
 calc_models_ic(list(mod_2Ac1))
 ```
 
-**2. Remove additive from categorical inputs, keep the rest as 2Ac1.**
+**2. Remove categorical inputs, keep the rest as 2Ac1.**  
 
 ```{r model 2Ac2}
 mod_2Ac2 <- lm(
@@ -169,7 +170,7 @@ mod_2Ac4 <- lm(response ~ (.)^2, df_preproc)
 calc_models_ic(list(mod_2Ac4))
 ```
 
-**Save the models to file.**  
+Save the models to file.  
 
 ```{r}
 my_models <- mget(ls(pattern = "^mod_2A"))
@@ -202,16 +203,15 @@ my_models <- mget(ls(pattern = "^mod_2A"))
 calc_models_ic(my_models) %>% knitr::kable()
 ```
 
-- Metrics
-  - I will use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.  
+- Use information criterion (AIC/BIC) for model selection since models are developed from training set without resampling.
 
 - Special case
-  - The all-pairwise model (`mod_2Ac4`) resulted large negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will have enormous uncertainty, but including it for resampling/regularization in part 2D.  
-  - Thus I will skip it here too, and examine only models with second lowest AIC, second lowest BIC, and one in between for both metrics.
+  - The all-pairwise model (`mod_2Ac4`) resulted large negative AIC/BIC. I talked to Dr. Yurko, and he suggests skipping this one for the Bayesian analysis because it will result enormous uncertainty. I will include for regularization in part 2D.
+  - I will skip it here too, and examine only models with second lowest AIC, second lowest BIC, and one in between for both metrics.
 
 - Best models
   - Based on the BIC, select `mod_2A3`.
-  - Based on the AIC, select `mod_2Ac3`.  
+  - Based on the AIC, select `mod_2Ac3`.
   - Based on balance of the two, select `mod_2Ac1`
 
 ### Coefficient Plot
@@ -231,7 +231,7 @@ coefplot(mod_2Ac3)
 
 ### Important Features
 
-- Extract significant coefficients and arrange by overall score.  
+**Extract significant coefficients and arrange by overall score.**  
 
 ```{r}
 mod_2A3 %>% pull_lm_coefs_signif() %>% knitr::kable()
@@ -239,8 +239,8 @@ mod_2Ac1 %>% pull_lm_coefs_signif() %>% knitr::kable()
 mod_2Ac3 %>% pull_lm_coefs_signif() %>% knitr::kable()
 ```
 
-- For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`.  
-- For categorical inputs, the `region` appears important, and some levels of `customer` too.
-- Once we interact `region` to the nonlinear features, it is notable that interactions from `region` are important.  
+- For continuous inputs, potential important ones are `xw_01`, `xb_04`, `xb_07`, `xa_02`.
+- For categorical inputs, `region` appears important, and some levels of `customer` too.
+- Once we interact `region` to the nonlinear features, it is notable that interaction from `region` is important.
 
 ----

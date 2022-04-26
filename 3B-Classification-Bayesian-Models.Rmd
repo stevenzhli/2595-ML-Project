@@ -47,6 +47,8 @@ df_prep_cl <- df %>%
   )
 ```
 
+----
+
 ## Bayesian Model Fitting
 
 **Select 3 models from 3A for Bayesian model fitting.** 
@@ -62,7 +64,7 @@ mod_3A3 <- readr::read_rds("models/mod_3A3")
 mod_3Ac2 <- readr::read_rds("models/mod_3Ac2")
 ```
 
-**1. Based on model `mod_3A2`, linear additive of continuous inputs only.**
+**1. Based on model `mod_3A2`, linear additive of continuous inputs only.**  
 
 ```{r model 3B1_3A2}
 mod_3B1_3A2 <- stan_glm(
@@ -73,7 +75,7 @@ mod_3B1_3A2 <- stan_glm(
 )
 ```
 
-**2. Based on model `mod_3A3`, linear additive of all inputs.**
+**2. Based on model `mod_3A3`, linear additive of all inputs.**  
 
 ```{r model 3B2_3A3}
 mod_3B2_3A3 <- stan_glm(
@@ -85,7 +87,7 @@ mod_3B2_3A3 <- stan_glm(
 ```
 
 
-**3. Based on model `mod_3Ac2` where some inputs are interacted. **
+**3. Based on model `mod_3Ac2` where some inputs are interacted.**  
 
 ```{r model 3B3_3Ac2}
 mod_3B3_3Ac2 <- stan_glm(
@@ -96,12 +98,14 @@ mod_3B3_3Ac2 <- stan_glm(
 )
 ```
 
-**Save the 3 models to file.**  
+Save the 3 models to file.  
 
 ```{r}
 my_models <- mget(ls(pattern = "^mod_3B"))
 save_models(my_models)
 ```
+
+----
 
 ## Conclusions
 
@@ -137,7 +141,7 @@ loo_compare(my_models, criterion = "waic")
 
 #### Coefficients
 
-**Visualize posterior regression coefficient plot. **
+**Visualize posterior regression coefficient plot.**  
 
 ```{r Uncertainty, out.width=400, fig.width=4, fig.asp=1}
 plot(mod_3B1_3A2, pars = names(mod_3B1_3A2$coefficients)) +
@@ -162,6 +166,5 @@ mod_3B1_3A2 %>% as_tibble() %>%
 ```
 
 - The correlation of coefficients are from the correlation of corresponding input terms as in EDA.  
-
 
 ----
