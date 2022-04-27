@@ -45,7 +45,8 @@ df_prep_cl <- df %>%
   select(-c(rowid,response)) %>%
   mutate(
     across(starts_with("x"), scale)
-  )
+  ) %>% 
+  mutate(outcome = ifelse(outcome=="event",1,0))
 ```
 
 ----

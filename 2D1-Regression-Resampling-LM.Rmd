@@ -129,7 +129,7 @@ coef(mod_2Ac4) %>% length()
 - Model specification: use `lm` engine to fit the models.
 
 ```{r resample setup}
-set.seed(2543)
+set.seed(1324)
 cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 lm_spec <- linear_reg() %>% set_engine("lm")
@@ -152,7 +152,9 @@ lm_wset <- workflow_set(
 
 ### Execute
 
-```{r message=FALSE, warning=FALSE}
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
 tune_2D_lm <- lm_wset %>%
   workflow_map(
     fn = "fit_resamples",
@@ -163,10 +165,9 @@ tune_2D_lm <- lm_wset %>%
   )
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_2D_lm,"./models/tune_2D_lm")
 ```
-
 
 ----
 
@@ -180,22 +181,22 @@ tune_2D_lm <- readr::read_rds("./models/tune_2D_lm")
 
 **Visualize and compare performances across 5 linear models.**  
 
-Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to log scale.  
+Due to the extreme values of the two pairwise interaction models, the y-axis scale is set to square root scale.  
 
-```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
+```{r overview, out.width=800, fig.width=8, fig.asp=0.4,warning=FALSE}
 tune_2D_lm %>% collect_metrics() %>%
   ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
   geom_point(aes(y=mean), position = position_dodge(0.8)) +
   facet_wrap(~ .metric, scales = "free_y") +
-  scale_y_log10() +
+  scale_y_sqrt() +
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank()) +
   labs(color="model")
 ```
 
-Remove both models with pairwise interactions from visualization, since they have extreme poor performances (`mod_2D2`, `mod2D5`).  
+Remove both models with pairwise interactions from visualization, since they have poor performances (`mod_2D2`, `mod2D5`).  
 
-```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
+```{r zoom in, out.width=800, fig.width=8, fig.asp=0.4,warning=FALSE}
 tune_2D_lm %>% collect_metrics() %>%
   filter(!grepl("_pairwise_", wflow_id)) %>%
   ggplot(aes(x=wflow_id, color=wflow_id)) +
@@ -208,7 +209,6 @@ tune_2D_lm %>% collect_metrics() %>%
 
 - Judging from both MAE and RMSE, the best model should be the nonlinear additive model (green, `mod_2D3_2Ac1`).  
   - With RMSE, both all linear additive model (red, `mod_2D1`), and the nonlinear additive models are good. The model with `region` interaction to nonlinear features (blue, `mod_2D4_2Ac3`) resulted high RMSE.  
-  - For R-Squared, there is no statistically significant difference between the three models.  
 
 ### Best Model
 

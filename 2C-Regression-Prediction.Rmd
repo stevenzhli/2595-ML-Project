@@ -13,8 +13,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load_packages, message=FALSE, warning=FALSE}
 library(tidyverse)
 theme_set(theme_linedraw())
-library(rstanarm)
-options(mc.cores = parallel::detectCores())
 library(bayesplot)
 source("./scripts/utils.R")
 ```
@@ -111,7 +109,7 @@ mod_2B1_2A3 %>% as_tibble() %>%
 
 ### Set 1: xb_07, xb_04
 
-This set of inputs is associated with the top 2 most important continuous inputs.  
+This set of inputs is associated with the top 2 ranked continuous inputs.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07", "xb_04"))
@@ -151,7 +149,7 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
 
 ### Set 2: xb_07, customer
 
-This set of inputs are selected to examine how the categorical input `customer` affects the ability for the important continuous inputs to predict.  
+This set of inputs are selected to examine how the categorical input `customer` affects the ability for the top ranked continuous input to predict.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xb_07"), "customer")
@@ -238,7 +236,7 @@ make_post_pred(mod_2B1_2A3, viz_grid) %>%
 
 ### Set 4: xw_01, xb_03, region 
 
-This is just another set of inputs similar to set 3. Here I selected the input associated with the most significant nonlinear features (`xw_01`).  
+This is just another set of inputs similar to set 3. Here I selected the input associated with the top ranked nonlinear features (`xw_01`).  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_preproc, c("xw_01", "xb_03"), "region")

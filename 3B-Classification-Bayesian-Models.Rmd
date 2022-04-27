@@ -44,7 +44,8 @@ df_prep_cl <- df %>%
   select(-c(rowid,response)) %>%
   mutate(
     across(starts_with("x"), scale)
-  )
+  ) %>%
+  mutate(outcome = ifelse(outcome=="event",1,0))
 ```
 
 ----
@@ -56,7 +57,7 @@ df_prep_cl <- df %>%
 - Based on the best BIC, select `mod_3A2`. This is also the simplest model among these three.  
 - Based on balance of the two, select `mod_3A3`. This model adds categorical inputs.  
 - Based on the best AIC, select `mod_3Ac2`.  
-- I will use weak prior of R-squared 0.5.  
+- I will use a medium prior for all models.  
 
 ```{r}
 mod_3A2 <- readr::read_rds("models/mod_3A2")
@@ -71,6 +72,7 @@ mod_3B1_3A2 <- stan_glm(
   mod_3A2$call$formula,
   data = df_prep_cl %>% select(-all_of(sel_cat_in)),
   family = binomial,
+  prior = normal(0,2.5),
   seed = 1324
 )
 ```
@@ -82,6 +84,7 @@ mod_3B2_3A3 <- stan_glm(
   mod_3A3$call$formula,
   data = df_prep_cl,
   family = binomial,
+  prior = normal(0,2.5),
   seed = 1324
 )
 ```
@@ -94,6 +97,7 @@ mod_3B3_3Ac2 <- stan_glm(
   mod_3Ac2$call$formula,
   data = df_prep_cl,
   family = binomial,
+  prior = normal(0,2.5),
   seed = 1324
 )
 ```
@@ -132,7 +136,7 @@ my_models <- stanreg_list(
 loo_compare(my_models, criterion = "waic")
 ```
 
-- Based on WAIC, the three models really do not have much performance differences.  
+- Based on WAIC, the three models really do not have much performance differences (difference within standard error).  
 - Thus the simplest model, 3B1_3A2, where only have the continuous inputs linear added, should be picked as the best model.  
 
 ### Best Model
@@ -143,7 +147,7 @@ loo_compare(my_models, criterion = "waic")
 
 **Visualize posterior regression coefficient plot.**  
 
-```{r Uncertainty, out.width=400, fig.width=4, fig.asp=1}
+```{r Uncertainty, out.width=600, fig.width=6, fig.asp=1}
 plot(mod_3B1_3A2, pars = names(mod_3B1_3A2$coefficients)) +
   geom_vline(xintercept = 0, color = "black", linetype = "dashed", size = 0.5) +
   geom_point(
@@ -154,8 +158,8 @@ plot(mod_3B1_3A2, pars = names(mod_3B1_3A2$coefficients)) +
     )
 ```
 
-- The MLE estimated coefficients are plotted using purple diamonds. We see the default priors used slightly constrained the coefficients.  
-
+- The MLE estimated coefficients are plotted using purple diamonds. 
+- We see the prior slightly constrained most of the coefficients.  
 
 **Check the correlation of the posterior coefficients.**  
 
@@ -164,7 +168,5 @@ mod_3B1_3A2 %>% as_tibble() %>%
   select(all_of(names(mod_3B1_3A2$coefficients))) %>%
   cor() %>% corrplot(method="color", type="upper")
 ```
-
-- The correlation of coefficients are from the correlation of corresponding input terms as in EDA.  
 
 ----

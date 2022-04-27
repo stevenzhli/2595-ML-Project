@@ -42,36 +42,83 @@ Tasks
 
 ----
 
-## Predict Unpredictable Customer
+## Predict Hard to Predict Customer
 
-**Read in the respective best model for each task.**
+**Read in the respective best model for each task.**  
 
 ```{r}
-mod_rg_xgb <- readr::read_rds("./models/mod_2D_adv_best_wflow")
-mod_rg_xgb_fit <- mod_rg_xgb %>% fit(df_regr)
+mod_regr <- readr::read_rds("./models/mod_2D_enet_best_wflow")
+mod_regr_fit <- mod_regr %>% fit(df_regr)
+readr::write_rds(mod_regr_fit, "./models/mod_regr_best.rds")
 
-mod_cl_enet <- readr::read_rds("./models/mod_3D_enet_best_wflow")
-mod_cl_enet_fit <- mod_cl_enet %>% fit(df_clas)
+mod_clas <- readr::read_rds("./models/mod_3D_enet_best_wflow")
+mod_clas_fit <- mod_clas %>% fit(df_clas)
+readr::write_rds(mod_clas_fit, "./models/mod_clas_best.rds")
 ```
 
 ----
 
 ## Regression
 
-For my best regression model, the most important feature is the `xw_01`, and the most unpredictable customer is `K`, which is only present in region `ZZ`.  
+For my best regression model, the most important continuous feature is the `xw_01`, followed by `xa_08`. The most unpredictable customer for the regression task is customer `K`, which is only present in region `ZZ`.  
 
 ```{r}
 my_inputs <- setdiff(names(df_regr),"response")
-viz_grid <- make_test_input_grid(my_inputs, df_regr, c("xw_01")) %>% mutate(customer = "K", region = "ZZ")
+viz_grid <- make_test_input_grid(my_inputs, df_regr, c("xw_01","xa_08")) %>%
+  mutate(customer = "K", region = "ZZ")
+
+predict(mod_regr_fit, new_data = viz_grid) %>% bind_cols(viz_grid) %>%
+  ggplot() +
+  geom_line(aes(x=xw_01,y=.pred,color=xa_08)) +
+  facet_wrap(~xa_08) +
+  scale_color_viridis_c()
 ```
+
+- For the regression task, my best model is a Elastic Net model. The prediction appears to be linearly related to the primary input. This is expected as the underlying model is just a linear model without nonlinear basis. 
+- From the prediction, the response increase as either input increases.  
 
 ----
 
 ## Classification
 
-For my best classification model, the top 2 most important features are `xn_01`, `xn_03`.  
+For my best classification model, the top 2 ranked important features are `xn_01`, `xn_03`.  The most unpredictable customer for the classification task is customer `Other`, which is most abundant in region `YY`. 
 
+```{r}
+my_inputs <- setdiff(names(df_clas),"outcome")
+viz_grid <- make_test_input_grid(my_inputs, df_clas, c("xn_01","xn_03")) %>%
+  mutate(customer = "Other", region = "YY")
 
+predict(mod_clas_fit, new_data = viz_grid, type = "prob") %>% 
+  bind_cols(viz_grid) %>% 
+  ggplot() +
+  geom_line(aes(x=xn_01,y=.pred_event,color=xn_03)) +
+  facet_wrap(~xn_03) +
+  scale_color_viridis_c()
+```
+
+- The best model for the classification task is a SVM model.
+- The event probability decreases as either input increases. 
 
 ----
 
+## Predict the Holdout Set
+
+```{r}
+holdout <- readr::read_csv('./data/final_project_holdout_inputs.csv', col_names = TRUE)
+
+my_pred <-
+  predict(mod_regr_fit, new_data = holdout) %>%
+  cbind(predict(mod_clas_fit, new_data = holdout, type = "prob")) %>% 
+  rename("y"=.pred, "probability"=.pred_event) %>% 
+  rowid_to_column(var="id") %>% 
+  select(-.pred_non_event) %>% 
+  mutate(outcome=ifelse(probability>=0.5,"event","non-event"))
+
+readr::write_csv(my_pred, "my_holdout_pred.csv")
+```
+
+**Compute metrics**
+
+https://anastasia-sosnovskikh.shinyapps.io/infsci2595-spring2022/
+
+----

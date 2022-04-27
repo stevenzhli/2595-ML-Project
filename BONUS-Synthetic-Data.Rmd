@@ -1,0 +1,232 @@
+---
+title: "INFSCI 2595 Final Project"
+subtitle: "BONUS, Synthetic Data"
+author: "Zhenyu Li"
+date: '2022-04-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(bayesplot)
+theme_set(theme_linedraw())
+library(rstanarm)
+library(patchwork)
+options(mc.cores = parallel::detectCores())
+source("./scripts/utils.R")
+```
+
+----
+
+- You may consider the regression problem OR the classification problem, but you must use Bayesian modeling techniques.
+- Create your own synthetic data and demonstrate the ability to recover the model parameters that generated the data.
+- You must use the following to earn the maximum bonus:
+  - You must consider 1 categorical variable with 4 levels (unique values)
+  - You must consider 3 continuous variables
+  - You must specify the true functional (basis) relationship between the linear predictor and the inputs. You must specify the true parameter values.
+  - You must generate small, medium, and large sample size data sets.
+  - You must fit your model, assuming the correct functional (basis) relationship for the small, medium, and large sample sizes.
+  - How well are you able to recover the true parameter values given the three training sample sizes?
+
+----
+
+## Create Synthetic Data
+
+Define the true relationship between inputs and the response as follows:
+
+- The customer categorical input affects the intercept of response. 
+- Each continuous input has a 2 degree polynomial relationship to the response.
+- The 3 polynomial basis have linear additive effect to the response. 
+
+### True Parameters
+
+**Define the true parameters for the models as follows.**
+
+```{r}
+beta0_customer <- c("AA"=-1.2,"BB"=0.72,"CC"=-0.3,"DD"=1.5)
+beta_true <- c(1.2, 0.8, -0.4, -0.48, -1.4, 0.75)
+sigma_true <- 3
+```
+
+
+### Random Observations
+
+**Create function to generate the random observations from true parameters.**
+
+```{r}
+gen_rand_obs <- function(num_obs, beta_vec, beta0_cate, sigma) {
+  # browser()
+  my_quad_func <- function(x, beta_vec) { 
+    beta_vec[1] * x + beta_vec[2] * x^2 
+  }
+  # number of input variables
+  num_invar <- 3
+  # make some random values, row = obs, col = different inputs
+  set.seed(1324)
+  my_grid <- matrix(
+    rnorm(n = num_obs * num_invar, mean = 0, sd = 1),
+    nrow = num_obs, byrow = T,
+    dimnames = list(NULL,c("x1","x2","x3"))
+    ) %>% as_tibble() %>% 
+    cbind(
+      customer = replicate(num_obs, sample(names(beta0_cate), 1))
+    )
+  # compute the true response, and noised response
+  my_grid %>% mutate(
+    mu = my_quad_func(x1, beta_vec[1:2]) + 
+      my_quad_func(x2, beta_vec[3:4]) + 
+      my_quad_func(x3, beta_vec[5:6]) + 
+      beta0_cate[customer],
+    y = rnorm(n = n(), mean = mu, sd = sigma)
+  )
+}
+```
+
+**Generate 400 obserations from the true parameters.**
+
+```{r}
+my_df <- gen_rand_obs(400, beta_true, beta0_customer, sigma_true) %>% rowid_to_column("obs_id")
+my_df %>% head()
+```
+**Plot the true trend and the noisy observation w.r.t. the first input and customer.** 
+
+```{r}
+my_df %>% slice_head(n = 200) %>% 
+  ggplot(aes(x=x1)) +
+  geom_point(aes(y=y), color = "black") +
+  geom_line(aes(y=mu), color = "red") +
+  facet_wrap(~customer)
+```
+
+
+## Train
+
+### Small Traing Data
+
+For the small set, use 20 data points to train the model. Use a stronger prior of R2 = 0.65.  
+
+```{r cache=T}
+num_train_points <- 20
+df_train = my_df %>% slice_head(n = num_train_points)
+
+# specify the true relationship in model
+mod_small <- stan_lm(
+  y ~ customer + x1 + I(x1^2) + x2 + I(x2^2) + x3 + I(x3^2),
+  data=df_train,
+  prior = R2(location = 0.65),
+  seed = 1324
+)
+```
+
+### Medium Traing Data
+
+For the medium set, use 100 data points. 
+
+```{r cache=T}
+num_train_points <- 100
+df_train = my_df %>% slice_head(n = num_train_points)
+
+# specify the true relationship in model
+mod_medium <- stan_lm(
+  y ~ customer + x1 + I(x1^2) + x2 + I(x2^2) + x3 + I(x3^2),
+  data=df_train,
+  prior = R2(location = 0.65),
+  seed = 1324
+)
+```
+
+
+### Large Traing Data
+
+For the large set, use all 400 data points. 
+
+```{r cache=T}
+num_train_points <- 400
+df_train = my_df %>% slice_head(n = num_train_points)
+
+# specify the true relationship in model
+mod_large <- stan_lm(
+  y ~ customer + x1 + I(x1^2) + x2 + I(x2^2) + x3 + I(x3^2),
+  data=df_train,
+  prior = R2(location = 0.65),
+  seed = 1324
+)
+```
+
+
+## Conclusions
+
+**Compile the true data into a dataframe for plotting with the exact coefficient names as model.** 
+
+```{r}
+par_names <-  c(mod_small %>% coef() %>% names(), "sigma")
+true_df <- tibble(
+  param = c(par_names),
+  value = c(beta0_customer, beta_true, sigma_true)
+)
+true_df
+```
+
+**Generate the posterior distribution plots and add in the true value.**
+
+```{r}
+g_small <- mcmc_areas(mod_small, pars = par_names) + 
+  geom_point(data = true_df, aes(y = param, x = value), color = "red", shape = "|", size = 6)
+g_medium <- mcmc_areas(mod_medium, pars = par_names) + 
+  geom_point(data = true_df, aes(y = param, x = value), color = "red", shape = "|", size = 6)
+g_large <- mcmc_areas(mod_large, pars = par_names) + 
+  geom_point(data = true_df, aes(y = param, x = value), color = "red", shape = "|", size = 6)
+```
+
+### Model Coefficients
+
+**Plot side by side.**
+
+```{r out.width = 1000, fig.width=10}
+g_small + g_medium + g_large
+```
+
+- It is obvious that added data points increase our posterior precision of estimated parameters. 
+- With the large data set (400), it is clear that the true values of model parameters (red ticks) can be better recovered for the continuous features. But for the medium data set (100 data points), some coefficients for continuous features were not too well recovered. 
+- For the categorical input, it seems adding more data points has very limited effect on recovering the original coefficients.  This is likely because the categorical input in my true relationsihp only servers as the intercept, and there can be more ways to fit it.  
+
+### Uncertainty in Prediction
+
+**Visualize the data points and predictive trend w.r.t. the first two inputs.**
+
+```{r}
+my_inputs <- my_df %>% select(-obs_id, mu, y) %>% colnames()
+my_viz_grid <- make_test_input_grid(my_inputs, my_df, c("x1","x2"), "customer")
+```
+
+**Model from small data points.**
+
+```{r}
+make_post_pred(mod_small, my_viz_grid) %>% ggplot(aes(x=x1, fill=x2)) +
+  geom_ribbon(aes(ymin = y_lwr, ymax = y_upr), alpha=0.6) +
+  geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.8, fill="grey") +
+  geom_line(aes(y = trend_avg), size=0.5) +
+  facet_grid(customer~x2, scales="free_y") +
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "x2", breaks = NULL, labels = NULL)) +
+  scale_fill_viridis_c() + ylab("log response")
+```
+
+**Model from medium data points.**
+
+```{r}
+make_post_pred(mod_medium, my_viz_grid) %>% ggplot(aes(x=x1, fill=x2)) +
+  geom_ribbon(aes(ymin = y_lwr, ymax = y_upr), alpha=0.6) +
+  geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.8, fill="grey") +
+  geom_line(aes(y = trend_avg), size=0.5) +
+  facet_grid(customer~x2, scales="free_y") +
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "x2", breaks = NULL, labels = NULL)) +
+  scale_fill_viridis_c() + ylab("log response")
+```
+
+- We can see that the model from small data has greater confidence interval, indicating our predicted model mean behavior is more uncertain compared to the models developed with more data points. This is because of the lower posterior precision we get with small sample size and weak prior. It is worth considering increasing the prior. 
+
+----

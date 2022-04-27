@@ -26,7 +26,7 @@ df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
 
 ## Elastic Net
 
-Use Elastic Net to provide regularization to the two complex models that resulted extreme poor performances during the resampling.  
+Use Elastic Net to provide regularization to the two complex logistic models that resulted poor performances during the resampling.  
 
 ### Models
 
@@ -38,8 +38,7 @@ bp_prep_cl <- recipe(outcome ~ ., data=df_clas) %>%
   #prep(training=df_clas, retain=T) %>% bake(new_data=NULL)
 ```
 
-
-- `mod_3D2`: All pairwise interactions of continuous inputs, include additive categorical features.
+**`mod_3D2`: All pairwise interactions of continuous inputs, include additive categorical features.**  
   
 ```{r mod_3D2}
 bp_3D2 <- bp_prep_cl %>%
@@ -47,7 +46,9 @@ bp_3D2 <- bp_prep_cl %>%
   step_dummy(all_nominal_predictors())
 ```
 
-- `mod_3D6_3A5`: interact `customer` with continuous inputs.  
+**`mod_3D6_3A5`: interact `customer` with all continuous inputs.**  
+
+- This is modified from the `mod_3D5` where `customer` interacts with some selected continuous inputs. Because we are using regularization, I included more features here.  
 
 ```{r mod_3D6_3A5}
 bp_3D6_3A5 <- bp_prep_cl %>%
@@ -62,7 +63,7 @@ bp_3D6_3A5 <- bp_prep_cl %>%
 
 ### Explore
 
-**First use Lasso to explore the range for parameter tuning.**
+**First use Lasso to explore the range for parameter tuning.**  
 
 Define the Lasso only model specification.  
 
@@ -99,25 +100,14 @@ lasso_fit_3D6 %>% extract_fit_parsnip() %>%
 ```
 ### Setup
 
-**Allow parallel processing.**  
-
-```{r message=FALSE, warning=FALSE}
-if (parallel::detectCores(logical=FALSE) > 3) {
-  library(doParallel)
-  num_cores <- parallel::detectCores(logical=FALSE)
-  cl <- makePSOCKcluster(num_cores - 2)
-  registerDoParallel(cl)
-}
-```
-
-**Create the custom search grid for the penalty strength and mixing fraction parameters.**
+**Create the custom search grid for the penalty strength and mixing fraction parameters.**  
 
 - Use the bound of penalty strength for the range of parameters I am interested to tune.
 - Use 0.1 as lower bound for mixing fraction to avoid fully Ridge.  
 
 ```{r tuning grid}
 # set tuning parameter ranges
-my_lambda <- penalty(range = c(-8,-2), trans = log_trans())
+my_lambda <- penalty(range = c(-8,-1), trans = log_trans())
 my_alpha <- mixture(range = c(0.1, 1.0))
 # construct the tuning grid
 enet_grid_cl <- grid_regular(
@@ -125,18 +115,18 @@ enet_grid_cl <- grid_regular(
   levels = c(penalty = 60, mixture = 5))
 ```
 
-**Define the resampling scheme**
+**Define the resampling scheme**  
 
 - Use the 5-fold cross-validation with 5 repeats.
 - Model specification: use `glmnet` engine.
 
 ```{r resampling}
-set.seed(1493)
-enet_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
-my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
+set.seed(1324)
+cv_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
+my_metrics_cl <- metric_set(accuracy, roc_auc, mn_log_loss)
 ```
 
-**Create workflow set.**
+**Create workflow set.**  
 
 ```{r workflow}
 enet_spec_cl <-
@@ -156,13 +146,23 @@ enet_wset_cl <-
 
 ### Execute
 
-```{r message=FALSE, warning=FALSE}
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
+# create cluster to allow parallel computing
+if (parallel::detectCores(logical=FALSE) > 3) {
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+# start tuning
 tune_3D_enet <- enet_wset_cl %>%
   workflow_map(
     fn = "tune_grid",
     grid = enet_grid_cl,
-    resamples = enet_folds,
-    metrics = my_metrics,
+    resamples = cv_folds,
+    metrics = my_metrics_cl,
     control = control_grid(
       # save_pred = TRUE,
       parallel_over = "everything",
@@ -170,9 +170,12 @@ tune_3D_enet <- enet_wset_cl %>%
     ),
     verbose = T
   )
+# close the cluster
+stopCluster(cl)
+registerDoSEQ()
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_3D_enet,"./models/tune_3D_enet")
 ```
 
@@ -188,7 +191,7 @@ tune_3D_enet <- readr::read_rds("./models/tune_3D_enet")
 
 **Visualize the model performance metrics across the two models tuned.** 
 
-```{r visualize tuning, out.width=800, fig.width=8, fig.asp=.6, message=FALSE, warning=FALSE}
+```{r visualize tuning, out.width=800, fig.width=8, fig.asp=1, message=FALSE, warning=FALSE}
 names(tune_3D_enet$result) <- tune_3D_enet$wflow_id
 
 tune_3D_enet$result %>%
@@ -209,23 +212,53 @@ tune_3D_enet$result %>%
   scale_color_viridis_d() + scale_fill_viridis_d()
 ```
 
+- The performances are similar for the two models. 
 
 ### Best Model
 
-**Select the best tuning parameters based on the one-standard-error rule from the mean log loss.**  
-
+**Select the best tuning parameters for each model based on mean log loss.**  
 
 ```{r}
 enet_best_roc_params <-
   tune_3D_enet$result %>%
-  map_dfr(select_by_one_std_err,
-          desc(penalty), desc(mixture), metric = "mn_log_loss",
-          .id = "wflow_id")
+  map_dfr(select_by_one_std_err, desc(mixture), metric = "mn_log_loss", .id = "wflow_id")
 enet_best_roc_params %>% select(-starts_with("."))
 ```
 
-- For the more complex model with pairwise interaction of all continuous inputs, a higher mixing rate is preferred, indicating more Lasso to shut off features.  
-- The model with interaction from `customer` resulted better mean log loss performance. Thus will serve as best model here.  
+- For the model with pairwise interaction of all continuous inputs, a higher mixing rate is preferred, indicating more Lasso to shut off features.  
+
+**Visualize all three performance metrics for the best models.**
+
+```{r visualize grid, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+tune_3D_enet %>% collect_metrics() %>% 
+  inner_join(enet_best_roc_params %>% select(wflow_id, .config), by = c("wflow_id", ".config")) %>% 
+  ggplot(aes(color = wflow_id, x = wflow_id)) +
+  geom_pointrange(aes(y=mean, ymax=mean+std_err, ymin=mean-std_err)) +
+  facet_wrap(~ .metric, scales = "free_y") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  xlab(label = NULL) + ylab(label = NULL) 
+```
+
+- The model with interaction from `customer` has better performance. 
+
+**Fit both best models and examine the number of non-zero coefficients.**  
+
+```{r message=FALSE, warning=FALSE}
+enet_wset_cl %>%
+  extract_workflow("all_cont_pairwise_enet") %>%
+  finalize_workflow(parameters = enet_best_roc_params %>% slice(1)) %>% 
+  fit(df_clas) %>% 
+  tidy() %>% filter(estimate != 0) %>% nrow()
+
+enet_wset_cl %>%
+    extract_workflow("inter_customer_cont_enet") %>%
+    finalize_workflow(parameters = enet_best_roc_params %>% slice(2)) %>% 
+  fit(df_clas) %>% 
+  tidy() %>% filter(estimate != 0) %>% nrow()
+```
+
+- There are slightly more features from the better model.  
+- Select the model with interaction from `customer` as the best model.  
 
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
@@ -244,8 +277,8 @@ mod_3D_enet_best_wflow$param <- enet_best_param
 mod_3D_enet_best_resample <-
   mod_3D_enet_best_wflow %>%
   fit_resamples(
-    resamples = enet_folds,
-    metrics = my_metrics,
+    resamples = cv_folds,
+    metrics = my_metrics_cl,
     control = control_resamples(save_pred = T)
   )
 
@@ -257,3 +290,4 @@ save_models(mget(ls(pattern = "^mod_3D_enet")))
 ```
 
 ----
+

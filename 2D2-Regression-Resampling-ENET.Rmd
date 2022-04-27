@@ -104,17 +104,6 @@ lasso_fit_2D5 %>% extract_fit_parsnip() %>%
 
 ### Setup
 
-Allow parallel processing.  
-
-```{r message=FALSE, warning=FALSE}
-if (parallel::detectCores(logical=FALSE) > 3) {
-  library(doParallel)
-  num_cores <- parallel::detectCores(logical=FALSE)
-  cl <- makePSOCKcluster(num_cores - 2)
-  registerDoParallel(cl)
-}
-```
-
 **Create the custom search grid for the penalty strength and mixing fraction parameters.**  
 
 - Use the bound of penalty strength for the range of parameters I am interested to tune.  
@@ -136,7 +125,7 @@ enet_grid <- grid_regular(
 - Model specification: use `glmnet` engine.
 
 ```{r resampling}
-set.seed(2543)
+set.seed(1324)
 cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
@@ -160,7 +149,17 @@ enet_wset <-
 
 ### Execute
 
-```{r message=FALSE, warning=FALSE}
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
+# create cluster to allow parallel computing
+if (parallel::detectCores(logical=FALSE) > 3) {
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+# start tuning
 tune_2D_enet <- enet_wset %>%
   workflow_map(
     fn = "tune_grid",
@@ -174,9 +173,12 @@ tune_2D_enet <- enet_wset %>%
     ),
     verbose = T
   )
+# close the cluster
+stopCluster(cl)
+registerDoSEQ()
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_2D_enet,"./models/tune_2D_enet")
 ```
 
@@ -186,6 +188,7 @@ readr::write_rds(tune_2D_enet,"./models/tune_2D_enet")
 
 ```{r}
 tune_2D_enet <- readr::read_rds("./models/tune_2D_enet")
+names(tune_2D_enet$result) <- tune_2D_enet$wflow_id
 ```
 
 ### Performance
@@ -193,8 +196,6 @@ tune_2D_enet <- readr::read_rds("./models/tune_2D_enet")
 **Visualize the model performance metrics across the two models tuned.** 
 
 ```{r visualize, out.width=800, fig.width=8, fig.asp=1, message=FALSE, warning=FALSE}
-names(tune_2D_enet$result) <- tune_2D_enet$wflow_id
-
 tune_2D_enet$result %>%
   map_dfr(collect_metrics, .id="wflow_id") %>%
   ggplot(aes(x = log(penalty))) +
@@ -219,32 +220,58 @@ tune_2D_enet$result %>%
 
 ### Best Model
 
-**Select the best tuning parameters based on the one-standard-error rule.**  
+**Select the best tuning parameters for each model based on RMSE.**  
 
 ```{r}
-enet_best_mae_params <-
+enet_best_rmse_params <-
   tune_2D_enet$result %>%
-  map_dfr(select_by_one_std_err,
-            desc(penalty), desc(mixture), metric = 'mae',
-          .id = "wflow_id")
-enet_best_mae_params %>% select(-starts_with("."))
+  map_dfr(select_by_pct_loss, desc(mixture), metric = 'rmse', .id = "wflow_id")
+enet_best_rmse_params %>% select(-starts_with("."))
 ```
 
-- Comparing across the best of the two, the "all pairwise interactions" one is clear winner.  
+**Visualize all three performance metrics for the best models.**
+
+```{r visualize grid, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+tune_2D_enet %>% collect_metrics() %>% 
+  inner_join(enet_best_rmse_params %>% select(wflow_id, .config), by = c("wflow_id", ".config")) %>% 
+  ggplot(aes(color = wflow_id, x = wflow_id)) +
+  geom_pointrange(aes(y=mean, ymax=mean+std_err, ymin=mean-std_err)) +
+  facet_wrap(~ .metric, scales = "free_y") +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  xlab(label = NULL)
+```
+
+- The "all pairwise interactions" one is the clear winner as it has lower RMSE/MAE and higher R-Squared than the other model.  
+
+**Fit both best models and examine the number of non-zero coefficients.**  
+
+```{r message=FALSE, warning=FALSE}
+enet_wset %>%
+  extract_workflow("all_cont_pairwise_enet") %>%
+  finalize_workflow(parameters = enet_best_rmse_params %>% slice(1)) %>% 
+  fit(df_regr) %>% 
+  tidy() %>% filter(estimate != 0) %>% nrow()
+
+enet_wset %>%
+    extract_workflow("all_pairwise_enet") %>%
+    finalize_workflow(parameters = enet_best_rmse_params %>% slice(2)) %>% 
+  fit(df_regr) %>% 
+  tidy() %>% filter(estimate != 0) %>% nrow()
+```
 
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
 
 ```{r}
 enet_best_wflow_mae <- "all_pairwise_enet"
+enet_best_param <- enet_best_rmse_params %>%
+      filter(wflow_id==enet_best_wflow_mae) %>%
+      select(all_of(names(enet_grid)))
 
 mod_2D_enet_best_wflow <-
   enet_wset %>%
   extract_workflow(enet_best_wflow_mae) %>%
-  finalize_workflow(
-    parameters = enet_best_mae_params %>%
-      filter(wflow_id==enet_best_wflow_mae) %>%
-      select(all_of(names(enet_grid)))
-  )
+  finalize_workflow(parameters = enet_best_param)
+mod_2D_enet_best_wflow$param <- enet_best_param
 
 mod_2D_enet_best_resample <-
   mod_2D_enet_best_wflow %>%

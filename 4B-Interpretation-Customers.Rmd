@@ -23,7 +23,7 @@ source("./scripts/utils.R")
 ```{r message=FALSE, warning=FALSE}
 df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 df_regr <- df %>% select(-c(rowid,outcome)) %>% mutate(response = log(response))
-df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
+df_clas <- df %>% select(-c(rowid,response))
 ```
 
 ----
@@ -31,27 +31,24 @@ df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
 Tasks
 
 - Identify the customers appears to be hardest to predict for the regression and classification tasks
-  - Base your conclusions on the best performing regression and classification models.
-    - You should base your conclusions on the resampled hold-out sets and NOT on the training set!
-    - Save your hold-out set predictions!
+- Base your conclusions on the best performing regression and classification models.
 
 ----
 
-## Unpredictable Customer
+## Hard to Predict Customer
 
-The best model for the **regression task** was identified in part 2D4 as the XGBoost model.  
+The best model for the **regression task** was identified in part 2D4 as the Elastic Net model.  
 The best model for the **classification task** was identified in part 3D4 as the Elastic Net model.  
 
-**Read in the respective best model for each task.**
+**Read in the respective best model for each task.**  
 
 ```{r}
-mod_rg_xgb <- readr::read_rds("./models/mod_2D_adv_best_wflow")
-mod_rg_xgb_resample <- readr::read_rds("./models/mod_2D_adv_best_resample")
+mod_regr <- readr::read_rds("./models/mod_2D_enet_best_wflow")
+mod_regr_resample <- readr::read_rds("./models/mod_2D_enet_best_resample")
 
-mod_cl_enet <- readr::read_rds("./models/mod_3D_enet_best_wflow")
-mod_cl_enet_resample <- readr::read_rds("./models/mod_3D_enet_best_resample")
+mod_clas <- readr::read_rds("./models/mod_3D_enet_best_wflow")
+mod_clas_resample <- readr::read_rds("./models/mod_3D_enet_best_resample")
 ```
-
 
 - To find the most unpredictable customer, need to visualize the prediction with regard to each customer.  
 - The respective resampled predictions are saved in the model resample files, and will be used for model evaluation.  
@@ -62,8 +59,8 @@ mod_cl_enet_resample <- readr::read_rds("./models/mod_3D_enet_best_resample")
 
 **Summarize the prediction error (MAE) across the resample repeated folds for each customer.** 
 
-```{r mae, out.width=600, fig.width=6, fig.asp=0.4, message=FALSE, warning=FALSE}
-regr_pred <- mod_rg_xgb_resample %>%
+```{r mae, out.width=600, fig.width=6, fig.asp=0.6, message=FALSE, warning=FALSE}
+regr_pred <- mod_regr_resample %>%
   # get all predictions across folds and repeats
   collect_predictions() %>%
   # join the training df
@@ -92,8 +89,8 @@ regr_pred %>%
 **Generate the ROC curve for each customer to visualize model performance.**   
 
 ```{r roc, out.width=600, fig.width=6, fig.asp=1, message=FALSE, warning=FALSE}
-clas_pred <- mod_cl_enet_resample %>%
-  collect_predictions(parameters = mod_cl_enet$param) %>%
+clas_pred <- mod_clas_resample %>%
+  collect_predictions(parameters = mod_clas$param) %>%
   left_join(rowid_to_column(select(df_clas,-outcome)), by = c(".row" = "rowid"))
 
 clas_pred %>%
@@ -102,12 +99,20 @@ clas_pred %>%
   autoplot() + facet_wrap(~ customer) +
   theme(legend.position = "none")
 ```
+**Examine observed event probability per customer.**
 
-- As mentioned earlier in 4D1, ROC is not an ideal metric since we have unbalanced events. This problem is exaggerated by splitting the observations further by `customer`. As demonstrated by the "perfect" ROC curve of customer E.  
+```{r}
+df_clas %>% select(customer, outcome) %>% 
+  mutate(outcome = ifelse(outcome == "event",1,0)) %>% 
+  group_by(customer) %>% 
+  summarize(event_prob = sum(outcome)/length(outcome)) %>% knitr::kable(align = "c")
+```
+
+- As mentioned earlier in 4D1, ROC is not representative of model behavior since we have unbalanced events. This problem is exaggerated by splitting the observations further by `customer`.  As shown by the extreme "good" performance for customers D, E, and the extreme "bad" performance for customer B, are both artifacts of the extreme skewed event probabilities of respective customer groups. 
 
 **Summarize the mean log loss across the resample repeated folds for each customer.** 
 
-```{r mll, out.width=600, fig.width=6, fig.asp=0.4, message=FALSE, warning=FALSE}
+```{r mll, out.width=600, fig.width=6, fig.asp=0.6, message=FALSE, warning=FALSE}
 clas_pred %>%
   group_by(id, id2, customer) %>%
   mn_log_loss(outcome, .pred_event) %>%
@@ -122,8 +127,6 @@ clas_pred %>%
     ))
 ```
 
-- The `outcome` from customer `Other` appears to be the most difficult to predict using my best classification model. Followed by customer A and Q.  
-
+- The `outcome` from customer `Other` appears to be the most difficult to predict using my best classification model. Because it is a pooled set, the next hard to predict customer is customer `A`.  
 
 ----
-

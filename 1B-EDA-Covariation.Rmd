@@ -205,7 +205,7 @@ df_eda %>%
 **Check how the event probability is related to the customer in each region.**  
 
 ```{r out.width=800, fig.width=8, fig.asp=0.30, warning=FALSE}
-df_eda %>% select(c(sel_cat,"outcome","binary_outcome")) %>%
+df_eda %>% select(c(all_of(sel_cat),"outcome","binary_outcome")) %>%
   ggplot(aes(x=customer)) +
   geom_bar(aes(fill=outcome),position="fill") +
   geom_jitter(aes(y=binary_outcome), height=0, alpha=0.2) +

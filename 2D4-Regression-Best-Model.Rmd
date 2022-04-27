@@ -39,7 +39,7 @@ my_models <- mget(ls(pattern = "^mod_2D.+_resample"))
 
 **Compare model parameters.**  
 
-```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+```{r metrics, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 my_models %>%
   map_dfr(collect_metrics, .id="model") %>%
   ggplot(aes(x=model, color=model)) +
@@ -49,10 +49,10 @@ my_models %>%
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
-- For all three metrics, the best model from the Elastic Net (green) has the best performance. 
-- The worst performance is from the best linear model fit from manually crafted features (blue).  
+- For all three metrics, the best model from the Elastic Net (green) has the best performances. 
+- The worst performance is from the best baseline linear model from manually crafted features (blue).  
 - The best model from the advanced models (XGBoost, red) has intermediate performances.  
-- Thus the best model for regression task is determined to be the Elastic Net model. 
+- Thus the **best model for regression task is determined to be the Elastic Net model**. 
 
 **Visualize predicted vs observed.**  
 
@@ -67,8 +67,7 @@ my_models %>%
   labs(x = "observed", y = "predicted")
 ```
 
-- From left to right are the XGBoost, the Elastic Net, and the baseline linear model.  
-- We see the middle one (Elastic Net) the predicted and observed are more closely correlated.    
+- From left to right are the SVM, the Elastic Net, and the baseline linear model.  
 
 ----
 

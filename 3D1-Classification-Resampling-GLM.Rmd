@@ -23,6 +23,7 @@ df <- readr::read_csv("./data/final_project_train.csv", col_names = TRUE)
 df_clas <- df %>% select(-c(rowid,response)) # remove unused columns
 ```
 
+----
 
 ## Generalized Linear Models
 
@@ -114,26 +115,15 @@ coef(mod_3Ac3) %>% length()
 
 ### Setup
 
-**Allow parallel processing.**  
-
-```{r message=FALSE, warning=FALSE}
-if (parallel::detectCores(logical=FALSE) > 3) {
-  library(doParallel)
-  num_cores <- parallel::detectCores(logical=FALSE)
-  cl <- makePSOCKcluster(num_cores - 2)
-  registerDoParallel(cl)
-}
-```
-
-**Define the resampling scheme.**
+**Define the resampling scheme.**  
 
 - Use 5 fold cross-validation with 5 repeats for resampling.
 - Will compare Accuracy, ROC area under curve metrics.  
 
 ```{r resample setup}
-set.seed(2543)
+set.seed(1324)
 cv_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
-my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
+my_metrics_cl <- metric_set(accuracy, roc_auc, mn_log_loss)
 glm_spec <- logistic_reg() %>% set_engine("glm")
 ```
 
@@ -155,18 +145,20 @@ glm_wset <- workflow_set(
 
 ### Execute
 
-```{r message=FALSE, warning=FALSE}
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
 tune_3D_glm <- glm_wset %>%
   workflow_map(
     fn = "fit_resamples",
     resamples = cv_folds,
-    metrics = my_metrics,
+    metrics = my_metrics_cl,
     control = control_resamples(save_pred = F),
     verbose = T
   )
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_3D_glm,"./models/tune_3D_glm")
 ```
 
@@ -180,10 +172,9 @@ tune_3D_glm <- readr::read_rds("./models/tune_3D_glm")
 
 ### Performance
 
-**Visualize and compare performances across 5 linear models.**
+**Visualize and compare performances across 5 linear models.**  
 
-
-```{r overview, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
+```{r overview, out.width=800, fig.width=8, fig.asp=0.4,warning=FALSE}
 tune_3D_glm %>% collect_metrics() %>%
   ggplot(aes(x=wflow_id, color=wflow_id)) +
   geom_linerange(aes(ymin=mean-std_err, ymax=mean+std_err))+
@@ -195,7 +186,7 @@ tune_3D_glm %>% collect_metrics() %>%
 
 - Remove the all pairwise model and the interaction with customer model to zoom in those with better performances.  
 
-```{r zoom in, out.width=700, fig.width=7, fig.asp=0.30, warning=FALSE}
+```{r zoom in, out.width=800, fig.width=8, fig.asp=0.4,warning=FALSE}
 tune_3D_glm %>% collect_metrics() %>%
   filter(!grepl("all_cont_pairwise|inter_customer", wflow_id)) %>%
   ggplot(aes(x=wflow_id, color=wflow_id)) +
@@ -207,8 +198,8 @@ tune_3D_glm %>% collect_metrics() %>%
 ```
 
 - For the all input additive model (red, `mod_3D1`) and continuous input additive model (green, `mod_3D3_3A2`), accuracy and ROC AUC performances are similar.  
-- Since from EDA we know the class distribution is skewed (low event probability). Both accuracy and ROC AUC may not properly reflect model performance. Thus I opt to use them as reference, and rely on mean log loss as the metric to select best model.  
-- Thus the best model is `mod_3D3_3A2` with continuous variables input additive.  
+- Since from EDA we know the class distribution is skewed (low event probability). Both accuracy and ROC AUC may not properly reflect model performance. Thus I opt to use them as reference, and rely mainly on mean log loss as the metric to select best model.  
+- Thus the best model is `mod_3D3_3A2` (green) with continuous variables additive only.  
 
 ### Best Model
 
@@ -224,7 +215,7 @@ mod_3D_glm_best_resample <-
   mod_3D_glm_best_wflow %>%
   fit_resamples(
     cv_folds,
-    metrics = my_metrics,
+    metrics = my_metrics_cl,
     control = control_resamples(save_pred = T)
   )
 

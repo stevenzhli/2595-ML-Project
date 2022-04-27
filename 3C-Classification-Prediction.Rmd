@@ -13,8 +13,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r load_packages, message=FALSE, warning=FALSE}
 library(tidyverse)
 theme_set(theme_linedraw())
-library(rstanarm)
-options(mc.cores = parallel::detectCores())
 library(bayesplot)
 source("./scripts/utils.R")
 ```
@@ -42,10 +40,9 @@ In this section, I will visualize how the generalized linear models predict the 
 
 **Select two Bayesian models from 3B for prediction and visualization.**   
 
-- Since all three Bayesian models have similar performance, I will just choose the two with more features so that there are more potential features to select for visualization.  
+- Since all three Bayesian models have similar performance, I will just choose the two with more features so that there are more potential ways to visualize.  
 
 - One with all inputs in linear additive relationship `mod_3B2_3A3`.  
-
 - One with some interactions of the inputs `mod_3B3_3Ac2`.  
 
 ```{r}
@@ -59,7 +56,7 @@ mod_3B3_3Ac2 <- readr::read_rds("models/mod_3B3_3Ac2")
 
 **Select inputs to visualize, based on model coefficient significance.**  
 
-**First model,  plot of significant coefficients.**  
+**First model, plot significant coefficients.**  
 
 ```{r mod_3B2_3A3}
 mod_3B2_3A3 %>% as_tibble() %>%
@@ -71,7 +68,7 @@ mod_3B2_3A3 %>% as_tibble() %>%
   geom_vline(xintercept = 0,linetype="dashed")
 ```
 
-**Second model, plot of significant coefficients.**  
+**Second model, plot significant coefficients.**  
 
 ```{r mod_3B3_3Ac2}
 mod_3B3_3Ac2 %>% as_tibble() %>%
@@ -83,10 +80,10 @@ mod_3B3_3Ac2 %>% as_tibble() %>%
   geom_vline(xintercept = 0,linetype="dashed")
 ```
 
-**Choose predictors to use based on both models.**  
+**Choose predictors to use based on important features of both models.**  
 
 - Selection criterion
-  1. Since continuous inputs are normalized, the greater magnitude of the estimated coefficient indicates more impact from this input to the `response`.
+  1. Since continuous inputs are normalized, the greater magnitude of the estimated coefficient indicates more impact from this input to the `outcome`.
   2. If two coefficients show significant difference on the coefplot they worth looking at.  
   3. Examine both continuous and categorical inputs.  
 
@@ -102,7 +99,7 @@ mod_3B3_3Ac2 %>% as_tibble() %>%
 
 ### Set 1: xw_03, xn_07 
 
-This set of inputs are associated with the top 2 most significant coefficients.  
+This set of inputs are associated with the top 2 ranked coefficients.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03", "xn_07"))
@@ -110,7 +107,7 @@ viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03", "xn_07"))
 
 **First model**  
 
-```{r mod_3B2.1, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
+```{r mod_3B2.1, out.width=1000, fig.width=10, fig.asp=0.25, warning=FALSE}
 make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -119,15 +116,15 @@ make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   scale_fill_viridis_c() + ylab("event prob")
 ```
 
-- The predicted mean event probability decreases with the input `xw_03`. (each facet)
-- The predicted mean event probability increases with the input `xn_07`. (across facets)
+- The predicted mean event probability increases with the input `xw_03`. (each facet)
+- The predicted mean event probability decreases with the input `xn_07`. (across facets)
 - There is higher uncertainty in model behavior 
   - when the `xw_03` is high (each facet, right), or 
   - when the `xn_07` is low (across facets, left)
 
 **Second model**  
 
-```{r mod_3B3.1, out.width=800, fig.width=8, fig.asp=0.24, warning=FALSE}
+```{r mod_3B3.1, out.width=1000, fig.width=10, fig.asp=0.25, warning=FALSE}
 make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -140,10 +137,9 @@ make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
 - Though the model uncertainty is even higher when input `xn_03` is low. (wider purple range)
 - But model uncertainty seems to improve when input `xn_03` is high. (thinner yellow range)
 
-
 ### Set 2: xw_03, xn_07, xn_08
 
-This set of inputs are associated with the top 3 most significant coefficients.  
+This set of inputs are associated with the top 3 most important coefficients.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03", "xn_07", "xn_08"))
@@ -151,7 +147,7 @@ viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03", "xn_07", "xn_
 
 **First model**  
 
-```{r mod_3B2.2, out.width=800, fig.width=8, fig.asp=0.8, warning=FALSE}
+```{r mod_3B2.2, out.width=1000, fig.width=10, fig.asp=0.8, warning=FALSE}
 make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -161,14 +157,14 @@ make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   scale_fill_viridis_c() + ylab("event prob")
 ```
 
-- This basically expands our visualization on set 1 by the third significant continuous input `xn_08`.  
+- This basically expands our visualization on set 1 by the third ranked continuous input `xn_08`.  
 - We see the 3rd input `xn_08` is responsible for some of the uncertainty when `xw_03` is low (left-most vertical facets).
   - When both `xn_07` and `xn_08` are low, there are more uncertainty in the prediction (top-left facet).  
   - If either one increases, there are less uncertainty in the predictions.  
 
 **Second model**  
 
-```{r mod_3B3.2, out.width=800, fig.width=8, fig.asp=0.8, warning=FALSE}
+```{r mod_3B3.2, out.width=1000, fig.width=10, fig.asp=0.8, warning=FALSE}
 make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -178,11 +174,11 @@ make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_03, fill=xn_07)) +
   scale_fill_viridis_c() + ylab("event prob")
 ```
 
-- Same trend as with the first model. Just more uncertainty with low values, but more precise when inputs have higher values.  
+- Same trend as with the first model. In comparison, this model has more uncertainty with low values, but more precise when inputs have higher values.  
 
 ### Set 3: xw_03, customer
 
-This set expands the most significant continuous input with the customer categorical input.  
+This set expands the top ranked continuous input with the customer categorical input.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03"), "customer")
@@ -190,7 +186,7 @@ viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_03"), "customer")
 
 **First model**  
 
-```{r mod_3B2.3, out.width=800, fig.width=8, fig.asp=0.2, warning=FALSE}
+```{r mod_3B2.3, out.width=1000, fig.width=10, fig.asp=0.25, warning=FALSE}
 make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=customer)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -198,7 +194,7 @@ make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_03, fill=customer))
   scale_fill_viridis_d() + ylab("event prob")
 ```
 
-- This plot aims to look at how the most significant continuous input can predict different customers.  
+- This plot aims to look at how the top ranked continuous input can predict different customers.  
   - It is clear that `customer` category affects the ability for `xw_03` to predict. (horizontal facets)
   - It is especially uncertain to predict for customers A and M.  
 
@@ -217,7 +213,7 @@ make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_03, fill=customer)
 
 ### Set 4: xw_02, xs_03
 
-This set aims to examine how the interactions affects the predictions, thus uses the inputs associated with the most significant coefficient with interactions.  
+This set aims to examine how the interactions affects the predictions, thus uses the inputs associated with the top ranked coefficient with interactions.  
 
 ```{r}
 viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_02","xs_03"))
@@ -225,7 +221,7 @@ viz_grid <- make_test_input_grid(my_inputs, df_prep_cl, c("xw_02","xs_03"))
 
 **First model**  
 
-```{r mod_3B2.4, out.width=800, fig.width=8, fig.asp=0.2, warning=FALSE}
+```{r mod_3B2.4, out.width=1000, fig.width=10, fig.asp=0.25, warning=FALSE}
 make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_02, fill=xs_03)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -238,7 +234,7 @@ make_post_pred_cl(mod_3B2_3A3, viz_grid) %>% ggplot(aes(x=xw_02, fill=xs_03)) +
 
 **Second model**  
 
-```{r mod_3B3.4, out.width=800, fig.width=8, fig.asp=0.2, warning=FALSE}
+```{r mod_3B3.4, out.width=1000, fig.width=10, fig.asp=0.25, warning=FALSE}
 make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_02, fill=xs_03)) +
   geom_ribbon(aes(ymin = trend_lwr, ymax = trend_upr), alpha=0.6) +
   geom_line(aes(y = trend_avg), size=0.5) +
@@ -249,8 +245,9 @@ make_post_pred_cl(mod_3B3_3Ac2, viz_grid) %>% ggplot(aes(x=xw_02, fill=xs_03)) +
 
 - With the second model, we see the interaction does have some effects.
 - The prediction of event probability by first term `xw_02` is affected by the value of the second term `xs_03`.  
-  - When both inputs are lower (purple, left), there is higher uncertainty in prediction and predicts slightly lower event probability.  
-  - When `xs_03` is higher (yellow), there is tremendous uncertainty for predicting event probability once `xw_02` value exceeds 0. But under low `xw_02` values the model predicts high event probability.
+  - When `xs_03` is low (purple), and `xw_02` is low (left), there is higher uncertainty predicting slightly higher event probability.  
+  - When `xs_03` is high (yellow), there is tremendous uncertainty for predicting event probability once `xw_02` value increases. But with low `xw_02` values the model predicts low event probability with more confidence.
+  - When both `xs_03` is not extreme, model predicts low event probability with more confidence.  
   
 ----
 

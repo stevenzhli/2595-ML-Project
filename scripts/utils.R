@@ -14,7 +14,7 @@ plot_grid <- function(plot) {
 calc_models_ic <- function(list_models, logistic = F) {
   #' calculate lm() model information criterion metrics (AIC, BIC) for a list of models
   basic <- c("model","AIC","BIC")
-  metrics <- if(logistic){ basic } else {c(basic, "adj.r.squared","r.squared")}
+  metrics <- if (logistic) basic else c(basic, "adj.r.squared","r.squared")
   mod_glance <- purrr::map_dfr(list_models, broom::glance, .id = "model") %>%
     select(all_of(metrics))
   mod_glance
@@ -43,10 +43,10 @@ pull_bayes_posterior_sigma <- function(list_models) {
   )
 }
 
-pull_bayes_coefs <- function(a_model, interval=0.9, signif=F) {
-  #' pull the significant coefficients from a Bayesian model
+pull_stan_coefs <- function(a_model, interval=0.9, signif=F) {
+  #' pull the significant coefficients from a rstanarm Bayesian model
   # if the upper and lower bound do not cross 0
-  out <- cbind(mean = coef(a_model), sd = se(a_model)) %>%
+  out <- cbind(mean = a_model$coef, se = a_model$ses) %>%
     as_tibble(rownames="coef")
   if (signif == T) {
     poster_int <- posterior_interval(a_model, prob=interval) %>%
@@ -60,7 +60,7 @@ pull_bayes_coefs <- function(a_model, interval=0.9, signif=F) {
 # 2C
 make_test_input_list <- function(var_name, all_data, top_num_vars, top_cat_var=NA) {
   #' setup one column of test grid based on a provided variable (var_name)
-  #' support 3 levels most for regression: 
+  #' support 3 levels most for regression:
   #' - y-axis, response
   #' - x-axis, top_num_vars[1]
   #' - h-grid, top_num_vars[2]
@@ -68,7 +68,7 @@ make_test_input_list <- function(var_name, all_data, top_num_vars, top_cat_var=N
   #' @param top_num_vars vector of string, numeric variable names
   #' @param top_cat_var string, categorical variable to expand
   #' @param all_data dataframe containing all data fields
-  
+
   # pull current input variable
   xvar <- all_data %>% select(all_of(var_name)) %>% pull()
   if (var_name == top_num_vars[1]) {
@@ -82,7 +82,7 @@ make_test_input_list <- function(var_name, all_data, top_num_vars, top_cat_var=N
     # tertiary numeric: specify 5 quantiles
     xgrid <- quantile(xvar, probs = c(0.05, 0.25, 0.5, 0.75, 0.95), na.rm = TRUE)
     xgrid <- as.vector(xgrid)
-  } else if (!is.na(top_cat_var) & var_name == top_cat_var){
+  } else if (!is.na(top_cat_var) & var_name == top_cat_var) {
     # categorical variables
     xgrid <- na.omit(unique(xvar))
   } else if (is.numeric(xvar)) {
@@ -99,7 +99,7 @@ make_test_input_grid <- function(all_input_names, all_data, top_num_vars, top_ca
   #' wrapper function to construct the test grid based on original data
   #' iteratively go through each column and construct the grid
   #' @param all_input_names vector of string, all input names in the dataframe
-  
+
   test_list <- purrr::map(
     all_input_names,
     make_test_input_list,
@@ -119,12 +119,12 @@ make_post_pred <- function(a_model, new_data) {
   #' make posterior linear predictor prediction and posterior response prediction
   #' from a rstanarm `stan_lm` linear model
   require(rstanarm)
-  
+
   # response (prediction interval)
   res_pred <- posterior_predict(a_model, newdata = new_data) %>%
     as_tibble() %>% rowid_to_column("post_id") %>%
-    pivot_longer(!c("post_id"), names_to = 'pred_id') %>%
-    mutate(across(.cols = 'pred_id', .fns = as.numeric)) %>%
+    pivot_longer(!c("post_id"), names_to = "pred_id") %>%
+    mutate(across(.cols = "pred_id", .fns = as.numeric)) %>%
     group_by(pred_id) %>%
     summarise(num_post = n(),
               y_avg = mean(value),
@@ -134,15 +134,15 @@ make_post_pred <- function(a_model, new_data) {
   # linear predictor (confidence interval)
   lin_pred <- posterior_linpred(a_model, newdata = new_data) %>%
     as_tibble() %>% rowid_to_column("post_id") %>%
-    pivot_longer(!c("post_id"), names_to = 'pred_id') %>%
-    mutate(across(.cols = 'pred_id', .fns = as.numeric)) %>%
+    pivot_longer(!c("post_id"), names_to = "pred_id") %>%
+    mutate(across(.cols = "pred_id", .fns = as.numeric)) %>%
     group_by(pred_id) %>%
     summarise(num_post = n(),
               trend_avg = mean(value),
               trend_lwr = quantile(value, 0.05),
               trend_upr = quantile(value, 0.95)) %>%
     ungroup()
-    
+
   left_join(res_pred, lin_pred, by="pred_id") %>%
     left_join(new_data %>% tibble::rowid_to_column("pred_id"), by = "pred_id")
 }
@@ -151,12 +151,12 @@ make_post_pred_cl <- function(a_model, new_data) {
   #' make posterior binary classification prediction
   #' from a rstanarm `stan_glm` model
   require(rstanarm)
-  
+
   # event prob trend predictor
   lin_pred <- posterior_epred(a_model, newdata = new_data) %>%
     as_tibble() %>% rowid_to_column("post_id") %>%
-    pivot_longer(!c("post_id"), names_to = 'pred_id') %>%
-    mutate(across(.cols = 'pred_id', .fns = as.numeric)) %>%
+    pivot_longer(!c("post_id"), names_to = "pred_id") %>%
+    mutate(across(.cols = "pred_id", .fns = as.numeric)) %>%
     group_by(pred_id) %>%
     summarise(num_post = n(),
               trend_avg = mean(value),
@@ -170,12 +170,12 @@ make_post_pred_cl <- function(a_model, new_data) {
 make_tidy_pred <- function(a_model, new_data, ...) {
   #' make linear model prediction from a saved `tidymodels` workflow
   require(tidymodels)
-  
+
   # response (prediction interval)
   res_pred <- predict(a_model, new_data, type = "pred_int", ...) %>%
     as_tibble() %>% rowid_to_column("post_id") %>%
-    pivot_longer(!c("post_id"), names_to = 'pred_id') %>%
-    mutate(across(.cols = 'pred_id', .fns = as.numeric)) %>%
+    pivot_longer(!c("post_id"), names_to = "pred_id") %>%
+    mutate(across(.cols = "pred_id", .fns = as.numeric)) %>%
     group_by(pred_id) %>%
     summarise(num_post = n(),
               y_avg = mean(value),
@@ -185,15 +185,15 @@ make_tidy_pred <- function(a_model, new_data, ...) {
   # linear predictor (confidence interval)
   res_pred <- predict(a_model, new_data, type = "pred_int", ...) %>%
     as_tibble() %>% rowid_to_column("post_id") %>%
-    pivot_longer(!c("post_id"), names_to = 'pred_id') %>%
-    mutate(across(.cols = 'pred_id', .fns = as.numeric)) %>%
+    pivot_longer(!c("post_id"), names_to = "pred_id") %>%
+    mutate(across(.cols = "pred_id", .fns = as.numeric)) %>%
     group_by(pred_id) %>%
     summarise(num_post = n(),
               y_avg = mean(value),
               y_lwr = quantile(value, 0.05),
               y_upr = quantile(value, 0.95)) %>%
     ungroup()
-  
+
 }
 
 # Shared
@@ -209,5 +209,5 @@ save_models <- function(list_models) {
 }
 
 # compute sem
-se <- function(x){sqrt(var(x)/length(x))}
+se <- function(x) sqrt(var(x)/length(x))
 

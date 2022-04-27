@@ -50,7 +50,7 @@ bp_2D_norm <- bp_2D_dummy %>%
   
 ```{r}
 nnet_spec <-
-  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>%
+  mlp(hidden_units = tune(), penalty = tune(), epochs = 2000) %>%
   set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>%
   set_mode("regression")
 
@@ -66,7 +66,7 @@ xgb_spec <-
    set_mode("regression")
 
 mars_spec <-
-   mars(prod_degree = tune()) %>%  #<- use GCV to choose terms
+   mars(prod_degree = tune()) %>% 
    set_engine("earth") %>%
    set_mode("regression")
 
@@ -116,36 +116,35 @@ adv_wset_all <- bind_rows(adv_wset_no_preproc, adv_wset_norm) %>%
 
 ### Setup
 
-Allow parallel processing.  
-
-```{r message=FALSE, warning=FALSE}
-if (parallel::detectCores(logical=FALSE) > 3) {
-  library(doParallel)
-  num_cores <- parallel::detectCores(logical=FALSE)
-  cl <- makePSOCKcluster(num_cores - 2)
-  registerDoParallel(cl)
-}
-```
-
 **Resampling setup.**  
 
 ```{r resampling}
-set.seed(2543)
+set.seed(1324)
 cv_folds <- vfold_cv(df_regr, v = 5, repeats = 5)
 my_metrics <- metric_set(rmse, mae, rsq)
 ```
 
 ### Execute
 
-**Perform model tuning with default grid and 10 levels at each tuning parameter.**  
+**Perform model tuning with default grid of 50 combinations for tuning parameters.**  
 
-```{r message=FALSE, warning=FALSE}
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
+# create cluster to allow parallel computing
+if (parallel::detectCores(logical=FALSE) > 3) {
+  library(doParallel)
+  num_cores <- parallel::detectCores(logical=FALSE)
+  cl <- makePSOCKcluster(num_cores - 2)
+  registerDoParallel(cl)
+}
+# start tuning
 tune_2D_adv <- adv_wset_all %>%
   workflow_map(
     fn = "tune_grid",
     resamples = cv_folds,
     metrics = my_metrics,
-    grid = 10,
+    grid = 20,
     control = control_grid(
       save_pred = FALSE,
       parallel_over = "everything",
@@ -153,9 +152,12 @@ tune_2D_adv <- adv_wset_all %>%
     ),
     verbose = TRUE
   )
+# close the cluster
+stopCluster(cl)
+registerDoSEQ()
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_2D_adv,"./models/tune_2D_adv")
 ```
 
@@ -165,23 +167,30 @@ readr::write_rds(tune_2D_adv,"./models/tune_2D_adv")
 
 ```{r}
 tune_2D_adv <- readr::read_rds("./models/tune_2D_adv")
+names(tune_2D_adv$result) <- tune_2D_adv$wflow_id
 ```
 
 ### Performance
 
-**Print out the value of model metrics for quick comparison.**  
+**Examine metrics across all models trained.**
 
-```{r}
-tune_2D_adv %>% rank_results(rank_metric = "mae", select_best = T)
-```
-
-**Visualize the performance metrics across the models tuned, selecting best performance tuning parameters for each.**  
-
-```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
-names(tune_2D_adv$result) <- tune_2D_adv$wflow_id
+```{r visualize grid, out.width=1000, fig.width=10, fig.asp=0.8, message=FALSE, warning=FALSE}
 tune_2D_adv %>%
   autoplot(
-    rank_metric = "mae",
+    rank_metric = "rmse",
+    metric = c("mae","rmse","rsq"),
+    select_best = F) +
+  facet_wrap(~.metric, scale = "free_y", ncol = 1)
+```
+
+- Clearly XGB model is winning here for all three metrics.  
+
+**Compare the model performance metrics for the best tuning parameters for each model type.**  
+
+```{r visualize best, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+tune_2D_adv %>%
+  autoplot(
+    rank_metric = "rmse",
     metric = c("mae","rmse","rsq"),
     select_best = T) +
   geom_text(
@@ -190,19 +199,19 @@ tune_2D_adv %>%
   theme(legend.position = "none")
 ```
 
-- Judging from the visualization, the best of XGB model has the best performance for all three metrics compared to the best of all other models.  
+- Judging from the metrics, XGB is clearly the best model.  
 
 ### Best Model
 
-**Extract the best tuning parameters based on the one-standard-error rule from the best model.**  
+**Extract the best tuning parameters from the best model.**  
 
 ```{r}
 adv_best_wf <- "XGB"
 
-adv_best_mae_params <-
+adv_best_rmse_params <-
   tune_2D_adv$result[[adv_best_wf]] %>%
-  select_by_one_std_err(tree_depth, learn_rate, trees, mtry, sample_size, metric = "mae")
-adv_best_mae_params %>% select(-starts_with("."))
+  select_best(metric = "rmse")
+adv_best_rmse_params %>% select(-starts_with("."))
 ```
 
 **Finalize the workflow for the best model and retrain with resampling to save predictions.** 
@@ -212,7 +221,7 @@ mod_2D_adv_best_wflow <-
   adv_wset_all %>%
   extract_workflow(adv_best_wf) %>%
   finalize_workflow(
-    parameters = adv_best_mae_params
+    parameters = adv_best_rmse_params
   )
 
 mod_2D_adv_best_resample <-

@@ -36,7 +36,7 @@ Train the following advanced models for the classification.
 
 ### Models
 
-**The preprocessing steps.**
+**The preprocessing steps.**  
 
 ```{r}
 bp_3D <- recipe(outcome ~ ., data=df_clas) %>%
@@ -45,11 +45,11 @@ bp_3D_norm <- bp_3D %>%
   step_normalize(all_numeric_predictors())
 ```
 
-**Model specifications.**
+**Model specifications.**  
   
 ```{r}
 nnet_spec <-
-  mlp(hidden_units = tune(), penalty = tune(), epochs = tune()) %>%
+  mlp(hidden_units = tune(), penalty = tune(), epochs = 2000) %>%
   set_engine("nnet", MaxNWts = 2000, trace=FALSE) %>%
   set_mode("classification")
 
@@ -65,7 +65,7 @@ xgb_spec <-
    set_mode("classification")
 
 mars_spec <-
-   mars(prod_degree = tune()) %>%  #<- use GCV to choose terms
+   mars(prod_degree = tune()) %>%
    set_engine("earth") %>%
    set_mode("classification")
 
@@ -102,47 +102,48 @@ adv_wset_no_preproc_cl <-
   )
 ```
 
-**Combine the workflows into one for training. **  
+**Combine the workflows into one for training.**  
 
 ```{r}
 adv_wset_all_cl <- bind_rows(adv_wset_no_preproc_cl, adv_wset_norm_cl) %>%
   mutate(wflow_id = gsub("(recipe_)","",wflow_id))
 ```
 
+----
+
 ## Training
 
 ### Setup
 
-**Allow parallel processing.**  
+**Resampling setup.**  
 
-```{r message=FALSE, warning=FALSE}
+```{r resampling}
+set.seed(1324)
+cv_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
+my_metrics_cl <- metric_set(accuracy, roc_auc, mn_log_loss)
+```
+
+### Execute
+
+**Perform model tuning with default grid of 50 combinations for tuning parameters.**  
+
+Note: to speed up knit, these two code blocks are set `eval=FALSE`. They can be manually executed in the rmarkdown file.  
+
+```{r execute, eval=FALSE}
+# create cluster to allow parallel computing
 if (parallel::detectCores(logical=FALSE) > 3) {
   library(doParallel)
   num_cores <- parallel::detectCores(logical=FALSE)
   cl <- makePSOCKcluster(num_cores - 2)
   registerDoParallel(cl)
 }
-```
-
-**Resampling setup.**
-
-```{r resampling}
-set.seed(2356)
-adv_folds <- vfold_cv(df_clas, v = 5, repeats = 5)
-my_metrics <- metric_set(accuracy, roc_auc, mn_log_loss)
-```
-
-### Execute
-
-**Perform model tuning with default grid and 10 levels at each tuning parameter.**  
-
-```{r message=FALSE, warning=FALSE}
+# start tuning
 tune_3D_adv <- adv_wset_all_cl %>%
   workflow_map(
     fn = "tune_grid",
-    resamples = adv_folds,
-    metrics = my_metrics,
-    grid = 10,
+    resamples = cv_folds,
+    metrics = my_metrics_cl,
+    grid = 20,
     control = control_grid(
       save_pred = FALSE,
       parallel_over = "everything",
@@ -150,9 +151,12 @@ tune_3D_adv <- adv_wset_all_cl %>%
     ),
     verbose = TRUE
   )
+# close the cluster
+stopCluster(cl)
+registerDoSEQ()
 ```
 
-```{r save result}
+```{r save_result, eval=FALSE}
 readr::write_rds(tune_3D_adv,"./models/tune_3D_adv")
 ```
 
@@ -162,23 +166,30 @@ readr::write_rds(tune_3D_adv,"./models/tune_3D_adv")
 
 ```{r}
 tune_3D_adv <- readr::read_rds("./models/tune_3D_adv")
+names(tune_3D_adv$result) <- tune_3D_adv$wflow_id
 ```
 
 ### Performance
 
-**Print out the value of model metrics for quick comparison. **  
+**Examine metrics across all models trained.**
 
-```{r}
-tune_3D_adv %>% rank_results(rank_metric = "mn_log_loss", select_best = T)
-```
-
-**Visualize the model performance metrics across the models tuned with the best tuning parameters for each.**  
-
-```{r visualize grid, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
-names(tune_3D_adv$result) <- tune_3D_adv$wflow_id
+```{r visualize grid, out.width=1000, fig.width=10, fig.asp=0.8, message=FALSE, warning=FALSE}
 tune_3D_adv %>%
   autoplot(
-    rank_metric = "mn_log_loss",
+    rank_metric = "roc_auc",
+    metric = c("accuracy","roc_auc","mn_log_loss","p"),
+    select_best = F) +
+  facet_wrap(~.metric, scale = "free_y", ncol = 1)
+```
+
+- The result is ranked by ROC AUC, and we can see the SVM models seem to have top ranked performances except accuracy.  
+
+**Compare the model performance metrics for the best tuning parameters for each model type.**  
+
+```{r visualize best, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+tune_3D_adv %>%
+  autoplot(
+    rank_metric = "accuracy",
     metric = c("accuracy","roc_auc","mn_log_loss"),
     select_best = T) +
   geom_text(
@@ -187,21 +198,21 @@ tune_3D_adv %>%
   theme(legend.position = "none")
 ```
 
-- Judging from the mean log loss, the best model from either SVM, RF, or XGB are preferred (lowest loss).  
-  - For ROC, best one from SVM resulted highest AUC, but the best RF model has no significant difference.  
-  - For accuracy, the XGB model has best performance, and there is no significant difference from RF.  
-- Overall, best model in RF has the best performances across all three metrics. Thus is selected as the best model.  
+
+- NNet though has great accuracy and ROC, the mean log loss is quite high compared to the other models.  
+- Judging from the three metrics, XGB has best overall performances though RF is also not significantly different.  
+- Arbitrarily determine XGB as best model.  
 
 ### Best Model
 
-**Extract the best tuning parameters based on the one-standard-error rule from the best model.**  
+**Extract the best tuning parameters from the best model.**  
 
 ```{r}
-adv_best_wf_cl <- "RF"
+adv_best_wf_cl <- "XGB"
 
 adv_best_roc_params <-
   tune_3D_adv$result[[adv_best_wf_cl]] %>%
-  select_by_one_std_err(mtry, min_n, metric = "mn_log_loss")
+  select_best(metric = "accuracy")
 adv_best_roc_params %>% select(-starts_with("."))
 ```
 
@@ -211,19 +222,16 @@ adv_best_roc_params %>% select(-starts_with("."))
 mod_3D_adv_best_wflow <-
   adv_wset_all_cl %>%
   extract_workflow(adv_best_wf_cl) %>%
-  finalize_workflow(
-    parameters = adv_best_roc_params
-  )
+  finalize_workflow(parameters = adv_best_roc_params)
 
 mod_3D_adv_best_resample <-
   mod_3D_adv_best_wflow %>%
   fit_resamples(
-    resamples = adv_folds,
-    metrics = my_metrics,
+    resamples = cv_folds,
+    metrics = my_metrics_cl,
     control = control_resamples(save_pred = T)
   )
 ```
-
 
 ```{r}
 save_models(mget(ls(pattern = "^mod_3D_adv")))

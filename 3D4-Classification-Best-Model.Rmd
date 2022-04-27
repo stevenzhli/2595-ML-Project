@@ -18,15 +18,17 @@ tidymodels_prefer()
 source("./scripts/utils.R")
 ```
 
+----
+
 ## Regression: Best Model
 
-Compare and choose the best model from: 
+Compare and choose the best model for the classification task from:  
 
-- Best baseline linear model
-- Best Elastic Net model
+- Best baseline generalized linear model
+- Best regularized Elastic Net model
 - Best advanced model
 
-**Read in the 3 best models from part 3D1 - 3D3. **
+**Read in the 3 best models from part 3D1 - 3D3.**  
 
 ```{r message=FALSE, warning=FALSE}
 mod_3D_glm_best_resample <- readr::read_rds("./models/mod_3D_glm_best_resample")
@@ -35,9 +37,9 @@ mod_3D_adv_best_resample <- readr::read_rds("./models/mod_3D_adv_best_resample")
 my_models <- mget(ls(pattern = "^mod_3D.+_resample"))
 ```
 
-**Compare model parameters. **
+**Compare model parameters.**  
 
-```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+```{r metrics, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 my_models %>%
   map_dfr(collect_metrics, .id="model") %>%
   ggplot(aes(x=model, color=model)) +
@@ -47,13 +49,11 @@ my_models %>%
   theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank())
 ```
 
-- To maximize ROC AUC, the Elastic Net model (green) is the best.
-- To maximize accuracy, the manually crafted logistic regression models (blue) is the best.  
-- To minimize mean log loss, both advanced model with RF (red) and Elastic Net model (green) have no significant difference.  
+- To maximize ROC AUC, the Elastic Net model (green) should be selected.
+- To maximize accuracy, the best of the baseline glm model (blue) should be selected.  
+- Choose the **Elastic Net model as best model for the classification task**.  
 
-- Based on min log loss and ROC, I will pick the Elastic Net model as best model.  
-
-**Visualize the ROC curves for the three models. **
+**Visualize the ROC curves for the three models.**  
 
 ```{r message=FALSE, warning=FALSE}
 my_models %>%
@@ -65,9 +65,9 @@ my_models %>%
 
 - The ROC curve of the three models are quite similar when averaged across the resamples.  
 
-**Visualize the ROC curve w.r.t each repeated resample folds. **  
+**Visualize the ROC curve w.r.t each repeated resample folds.**  
 
-```{r metrics, out.width=600, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
+```{r roc, out.width=800, fig.width=8, fig.asp=0.4, message=FALSE, warning=FALSE}
 my_models %>%
   map_dfr(collect_predictions, .id="model") %>%
   group_by(model, id, id2) %>%
@@ -76,6 +76,6 @@ my_models %>%
   theme(legend.position = "none")
 ```
 
-- We see that the best model of manually crafted features has largest performance variations across different resampling folds (rightmost). While the Elastic Net model has relatively smaller variations (middle). This is consistent with previous plots on the uncertainty of the ROC AUC.  
+- We see that the best model of manually crafted features (rightmost) has largest performance variations across different resampling folds. Uncertainty for the XGB model (left) seems more consistent across the resampling folds.  
 
 ----
