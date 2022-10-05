@@ -1,8 +1,8 @@
-# COVID-19 U.S. Case Surveillance Data Warehouse
+# Sentiment Based Predictive Modeling for PPG Sales Data
 
 Final project for INFSCI 2595 Machine Learning, University of Pittsburgh, Spring 2022.
 
-This repo contains the Rmarkdown files and R scripts used to perform predictive modeling using sentiment-derived features.
+This repo contains the data, Rmarkdown files and R scripts used to perform predictive modeling using sentiment-derived features.
 
 ## Introduction
 
