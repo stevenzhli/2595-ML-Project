@@ -10,13 +10,13 @@ This repo contains the data, Rmarkdown files and R scripts used to perform predi
 
 - The raw data was sponsored by PPG Inc sales team for education purposes only. 
   - Data used for modeling was already cleaned, integrated, and anonymized.
-- The sentiment-derived features were extracted and provided to us.
+  - The sentiment-derived features were extracted and provided to us.
   - Five different sets of sentiment derived features correspond to differnet lexicon or method used.
-  - Bing lexicon derived features have names starting with `xb_`
-  - NRC lexicon derived features have names starting with `xn_`
-  - AFINN lexicon derived features have names starting with `xa_`
-  - Word count derived features have names starting with `xw_`
-  - `sentimentr` derived features have names starting with `xs_`
+    - Bing lexicon derived features have names starting with `xb_`
+    - NRC lexicon derived features have names starting with `xn_`
+    - AFINN lexicon derived features have names starting with `xa_`
+    - Word count derived features have names starting with `xw_`
+    - `sentimentr` derived features have names starting with `xs_`
 
 - The data was already split to training and hold-out test set
   - For the training set, we get all input variables and response variables.
