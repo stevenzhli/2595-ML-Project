@@ -127,7 +127,7 @@ make_post_pred(mod_2B3_2Ac3, viz_grid) %>% ggplot(aes(x=xb_07, fill=xb_04)) +
   scale_fill_viridis_c() + ylab("log response")
 ```
 
-- The log-response increases with the linear predictor `xb_07` (each fact).
+- The log-response increases with the linear predictor `xb_07` (each facet).
 - The log-response decreases with the linear predictor `xb_04` (horizontal facts, shift trends down).
 - There is higher uncertainty on the model behavior (mean trend) when inputs are at extreme values.  
 
